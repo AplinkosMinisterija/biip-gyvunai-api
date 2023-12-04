@@ -1,0 +1,40 @@
+version: '3.5'
+
+services:
+  postgres:
+    image: postgis/postgis:14-master
+    networks:
+      - internal
+    ports:
+      - 5633:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gyvunai
+      TZ: 'Etc/GMT'
+      PGTZ: 'Etc/GMT'
+
+  redis:
+    image: redis:latest
+    networks:
+      - internal
+    ports:
+      - 5635:6379
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - 9050:9000
+      - 9051:9001
+    networks:
+      - internal
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server --console-address :9001 /data
+
+networks:
+  internal:
+
+volumes:
+  data:
