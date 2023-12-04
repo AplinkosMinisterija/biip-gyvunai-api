@@ -384,62 +384,6 @@ export default class UsersService extends moleculer.Service {
     });
   }
 
-  @Action({
-    rest: 'GET /signatureUsers',
-    auth: RestrictionType.USER,
-    params: {
-      municipalityId: 'any',
-    },
-  })
-  async getSignatureUsers(ctx: Context<{ municipalityId: any }>) {
-    let zuvGroup: any;
-    try {
-      zuvGroup = await ctx.call('tenants.get', {
-        id: Number(process.env.ZUVININKYSTES_TARNYBA_ID),
-      });
-    } catch (e) {}
-    let result: any = [];
-    if (zuvGroup) {
-      const zuvTarnyba: any = await this.findEntities(ctx, {
-        query: {
-          $raw: {
-            condition: `?? \\? ?`,
-            bindings: ['tenants', Number(process.env.ZUVININKYSTES_TARNYBA_ID)],
-          },
-        },
-        fields: ['fullName', 'phone'],
-      });
-
-      result.push({
-        id: 'ZUV',
-        name: zuvGroup.name,
-        users: zuvTarnyba,
-      });
-    }
-
-    const aadUsers: { rows: string[] } = await ctx.call('auth.public.getUsersInGroup', {
-      groupId: process.env.AUTH_AAD_GROUP_ID,
-    });
-    result.push({
-      id: 'AAD',
-      name: 'Aplinkos apsaugos departamentas prie Aplinkos ministerijos',
-      users: map(aadUsers?.rows, (u: string) => ({ fullName: u })),
-    });
-    const municipality: { id: number; name: string } = await ctx.call(
-      'locations.findMunicipalityById',
-      {
-        id: Number(ctx.params.municipalityId),
-      },
-    );
-    if (municipality) {
-      result.push({
-        id: 'SAV',
-        name: municipality.name,
-      });
-    }
-    return result;
-  }
-
   // CQRS - readonly cache for tenantUsers
   @Event()
   async 'tenantUsers.*'(ctx: Context<EntityChangedParams<TenantUser>>) {

@@ -336,7 +336,7 @@ export default class TenantUsersService extends moleculer.Service {
 
       if (authUser.groups?.length) {
         for (const group of authUser.groups) {
-          if (group.id && group.id !== Number(process.env.FREELANCER_GROUP_ID)) {
+          if (group.id) {
             const tenant: Tenant = await this.broker.call('tenants.findOne', {
               query: {
                 authGroup: group.id,

@@ -1,6 +1,6 @@
 import { Integrations } from '@sentry/node';
-import moleculer from 'moleculer';
-import { Service } from 'moleculer-decorators';
+import moleculer, { Errors } from 'moleculer';
+import { Method, Service } from 'moleculer-decorators';
 // @ts-ignore
 import SentryMixin from 'moleculer-sentry';
 
@@ -30,4 +30,14 @@ import SentryMixin from 'moleculer-sentry';
     },
   },
 })
-export default class SentryService extends moleculer.Service {}
+export default class SentryService extends moleculer.Service {
+  @Method
+  shouldReport({ error }: { error: Errors.MoleculerError }): boolean {
+    // Skip some error codes
+    if ([401, 404].includes(error?.code)) {
+      return false;
+    }
+
+    return true;
+  }
+}

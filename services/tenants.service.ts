@@ -253,7 +253,7 @@ export default class TenantsService extends moleculer.Service {
 
     for (const authGroupKey in authGroupsMap) {
       const authGroup = authGroupsMap[authGroupKey];
-      if (authGroup.id !== Number(process.env.FREELANCER_GROUP_ID) && authGroup.companyCode) {
+      if (authGroup.companyCode) {
         await this.createEntity(null, {
           name: authGroup.name,
           email: authGroup.companyEmail,
