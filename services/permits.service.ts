@@ -307,34 +307,6 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: 'GET /validate',
-    params: {
-      query: {
-        type: 'any',
-        properties: {
-          permitNumber: 'string|required',
-          issueDate: {
-            type: 'object',
-            required: true,
-            properties: {
-              $gte: 'date|required',
-              $lte: 'date|required',
-            },
-          },
-          issuer: {
-            type: 'number',
-            convert: true,
-            required: true,
-            integer: true,
-          },
-          id: {
-            type: 'number',
-            convert: true,
-            optional: true,
-            integer: true,
-          },
-        },
-      },
-    },
   })
   async validatePermit(
     ctx: Context<
