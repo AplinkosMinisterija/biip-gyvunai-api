@@ -19,6 +19,8 @@ import {
   CommonPopulates,
   RestrictionType,
   Table,
+  throwBadRequestError,
+  throwValidationError,
 } from '../types';
 import { handleFormatResponse } from '../types/functions';
 import { AuthUserRole, UserAuthMeta } from './api.service';
@@ -305,38 +307,82 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: 'GET /validate',
+    params: {
+      query: {
+        type: 'any',
+        properties: {
+          permitNumber: 'string|required',
+          issueDate: {
+            type: 'object',
+            required: true,
+            properties: {
+              $gte: 'date|required',
+              $lte: 'date|required',
+            },
+          },
+          issuer: {
+            type: 'number',
+            convert: true,
+            required: true,
+            integer: true,
+          },
+          id: {
+            type: 'number',
+            convert: true,
+            optional: true,
+            integer: true,
+          },
+        },
+      },
+    },
   })
-  async validatePermit(ctx: Context<any, UserAuthMeta>) {
-    const permit: Permit = await ctx.call('permits.findOne', ctx.params);
-    if (permit) {
-      if (
-        [AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some((r) => r === ctx?.meta?.authUser?.type)
-      ) {
-        throw new moleculer.Errors.MoleculerClientError(
-          'Permit already exists',
-          422,
-          'PERMIT_EXISTS',
-        );
-      } else {
-        if (!permit.user && !permit.tenant) {
-          return { permit };
-        }
-        if (
-          (ctx.meta.profile && ctx.meta.profile === permit.tenant) ||
-          (!ctx.meta.profile && ctx.meta.user.id === permit.user)
-        ) {
-          throw new moleculer.Errors.MoleculerClientError(
-            'Permit already exists',
-            422,
-            'PERMIT_EXISTS',
-          );
-        }
-        throw new moleculer.Errors.MoleculerClientError('Invalid permit', 422, 'INVALID_PERMIT');
-      }
+  async validatePermit(
+    ctx: Context<
+      { query: { permitNumber: string; issuer: number; issueDate: string; id?: number } },
+      UserAuthMeta
+    >,
+  ): Promise<any> {
+    if (typeof ctx.params.query === 'string') {
+      try {
+        ctx.params.query = JSON.parse(ctx.params.query);
+      } catch (err) {}
     }
-    return {
-      permit: null,
-    };
+
+    const { issuer, issueDate, permitNumber, id } = ctx?.params?.query;
+
+    const permit: Permit = await ctx.call('permits.findOne', {
+      query: {
+        issuer,
+        permitNumber,
+        issueDate,
+        ...(!!id && { id: { $ne: id } }),
+      },
+    });
+
+    if (!permit) {
+      return { permit: null };
+    }
+
+    const isUnassignedPermit = !permit.user && !permit.tenant;
+
+    const isAdmin = [AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
+      (r) => r === ctx?.meta?.authUser?.type,
+    );
+    const isCreatedBy =
+      (ctx?.meta?.profile && ctx?.meta?.profile === permit.tenant) ||
+      (!ctx.meta?.profile && ctx?.meta?.user?.id === permit.user);
+
+    if (isAdmin) {
+      return throwBadRequestError('Permit already exists');
+    }
+
+    if (isUnassignedPermit) return permit;
+
+    if (isCreatedBy) {
+      return throwBadRequestError('Permit already exists');
+    }
+
+    return throwValidationError('Invalid permit');
   }
 
   @Method
