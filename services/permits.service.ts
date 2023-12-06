@@ -335,8 +335,6 @@ export default class PermitsService extends moleculer.Service {
       return { permit: null };
     }
 
-    const isUnassignedPermit = !permit.user && !permit.tenant;
-
     const isAdmin = [AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
       (r) => r === ctx?.meta?.authUser?.type,
     );
@@ -348,13 +346,13 @@ export default class PermitsService extends moleculer.Service {
       return throwBadRequestError('Permit already exists');
     }
 
-    if (isUnassignedPermit) return permit;
+    if (!permit.user && !permit.tenant) return permit;
 
     if (isCreatedBy) {
       return throwBadRequestError('Permit already exists');
     }
 
-    return throwValidationError('Invalid permit');
+    throwValidationError('Invalid permit');
   }
 
   @Method
