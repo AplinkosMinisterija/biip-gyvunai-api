@@ -322,7 +322,9 @@ export default class PermitsService extends moleculer.Service {
 
     const { issuer, issueDate, permitNumber, id } = ctx?.params?.query;
 
-    if(!issuer || !issueDate || !permitNumber) return { permit: null }
+    if (!issuer || !issueDate || !permitNumber) {
+      return { permit: null };
+    }
 
     const permit: Permit = await ctx.call('permits.findOne', {
       query: {
