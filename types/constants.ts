@@ -134,6 +134,14 @@ export function throwNoRightsError(message?: string): Errors.MoleculerError {
   throw new Moleculer.Errors.MoleculerClientError(message || `No rights.`, 401, 'NO_RIGHTS');
 }
 
+export function throwBadRequestError(message?: string): Errors.MoleculerError {
+  throw new Moleculer.Errors.MoleculerClientError(message || `bad request.`, 400, 'BAD_REQUEST');
+}
+
+export function throwValidationError(message?: string): Errors.MoleculerError {
+  throw new Moleculer.Errors.ValidationError(message || `Not valid.`, 'VALIDATION_ERROR');
+}
+
 export const GroupByType = {
   MUNICIPALITY: 'MUNICIPALITY',
   MUNICIPALITY_AND_SPECIES_CLASSIFIER: 'MUNICIPALITY_AND_SPECIES_CLASSIFIER',
