@@ -71,6 +71,8 @@
     "moleculer-postgis": "^0.2.7",
     "moleculer-sentry": "^2.0.0",
     "moleculer-web": "^0.10.5",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43",
     "nats": "^2.13.1",
     "objection": "^3.0.1",
     "pg": "^8.10.0",
