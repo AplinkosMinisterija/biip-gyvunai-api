@@ -22,8 +22,8 @@ import {
   throwBadRequestError,
   throwValidationError,
 } from '../types';
-import { handleFormatResponse } from '../types/functions';
-import { AuthUserRole, UserAuthMeta } from './api.service';
+import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
+import { UserAuthMeta } from './api.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
 import { Species } from './species.service';
 import { Tenant } from './tenants.service';
@@ -339,18 +339,15 @@ export default class PermitsService extends moleculer.Service {
       return { permit: null };
     }
 
-    const isAdmin = [AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
-      (r) => r === ctx?.meta?.authUser?.type,
-    );
     const isCreatedBy =
       (ctx?.meta?.profile && ctx?.meta?.profile === permit.tenant) ||
       (!ctx.meta?.profile && ctx?.meta?.user?.id === permit.user);
 
-    if (isAdmin) {
+    if (isAdmin(ctx)) {
       return throwBadRequestError('Permit already exists');
     }
 
-    if (!permit.user && !permit.tenant) return permit;
+    if (!permit.user && !permit.tenant) return { permit };
 
     if (isCreatedBy) {
       return throwBadRequestError('Permit already exists');
@@ -363,23 +360,18 @@ export default class PermitsService extends moleculer.Service {
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
     const existingPermit = await this.findEntity(ctx, {
       query: JSON.stringify({
-        issueDate: ctx.params.issueDate,
+        issueDate: {
+          $gte: formatDateFrom(ctx.params.issueDate),
+          $lte: formatDateTo(ctx.params.issueDate),
+        },
         issuer: ctx.params.issuer,
         permitNumber: ctx.params.permitNumber,
       }),
     });
     if (existingPermit) {
-      throw new moleculer.Errors.MoleculerClientError(
-        'Permit already exists',
-        422,
-        'PERMIT_ALREADY_EXISTS',
-      );
+      return throwBadRequestError('Permit already exists');
     }
-    if (
-      ![AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
-        (role) => role === ctx.meta.authUser.type,
-      )
-    ) {
+    if (!isAdmin(ctx)) {
       const profile = ctx.meta.profile;
       const userId = ctx.meta.user.id;
       ctx.params.tenant = profile || null;
@@ -515,15 +507,12 @@ export default class PermitsService extends moleculer.Service {
       }),
     });
     if (!existingPermit) {
-      throw new moleculer.Errors.MoleculerClientError('Invalid permit', 422, 'INVALID_PERMIT');
+      return throwValidationError('Invalid permit');
     }
-    if (
-      ![AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
-        (role) => role === ctx.meta.authUser?.type,
-      )
-    ) {
+    if (!isAdmin(ctx)) {
       const profile = ctx.meta.profile;
       const userId = ctx.meta.user.id;
+
       const sameUser = !profile && existingPermit.user === userId;
       const sameTenant = profile && existingPermit.tenant === profile;
       const permitAssigned = existingPermit.user || existingPermit.tenant;
