@@ -100,17 +100,14 @@ export type SpeciesClassifier<
 export default class SpeciesClassifiersService extends moleculer.Service {
 
   @Method
-  async validateFamily(ctx: Context<{name: string, latinName: string}, UserAuthMeta>) {
+  async validateSpecies(ctx: Context<{name: string, latinName: string}, UserAuthMeta>) {
     if(ctx.params.name === ctx.params.latinName) {
       throwValidationError('Name and latin name cannot not be the same.');
     }
   }
   @Method
   async seedDB() {
-
     await this.broker.waitForServices(['familyClassifiers']);
-    console.log('species seed started')
-
     const data = [
       { name: 'Danielius', nameLatin: 'Dama dama', family:  2},
       { name: 'Danielius', nameLatin: 'Cervus dama', family: 2},
@@ -128,6 +125,5 @@ export default class SpeciesClassifiersService extends moleculer.Service {
       { name: 'Guanakas', nameLatin: 'Lama guanicoe', family: 11 },
     ];
     await this.createEntities(null, data);
-    console.log('species seed ended')
   }
 }
