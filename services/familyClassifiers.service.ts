@@ -16,10 +16,6 @@ import {
 } from '../types';
 import { UserAuthMeta } from "./api.service";
 
-export enum SpeciesType {
-  PROTECTED = 'PROTECTED',
-  INVASIVE = 'INVASIVE',
-}
 
 interface Fields extends CommonFields {
   id: number;
