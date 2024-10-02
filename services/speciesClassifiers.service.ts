@@ -1,6 +1,6 @@
 'use strict';
 
-import moleculer from 'moleculer';
+import moleculer, {Context} from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
@@ -11,8 +11,10 @@ import {
   CommonFields,
   CommonPopulates,
   RestrictionType,
-  Table,
+  Table, throwValidationError,
 } from '../types';
+import {FamilyClassifier} from "./familyClassifiers.service";
+import {UserAuthMeta} from "./api.service";
 
 export enum SpeciesType {
   PROTECTED = 'PROTECTED',
@@ -23,10 +25,13 @@ interface Fields extends CommonFields {
   id: number;
   name: string;
   nameLatin: string;
+  family: FamilyClassifier['id'];
   type?: SpeciesType;
 }
 
-interface Populates extends CommonPopulates {}
+interface Populates extends CommonPopulates {
+  family: FamilyClassifier;
+}
 
 export type SpeciesClassifier<
   P extends keyof Populates = never,
@@ -35,7 +40,9 @@ export type SpeciesClassifier<
 
 @Service({
   name: 'speciesClassifiers',
-  mixins: [DbConnection()],
+  mixins: [DbConnection({
+    collection: 'speciesClassifiers',
+  })],
   settings: {
     fields: {
       id: {
@@ -46,6 +53,18 @@ export type SpeciesClassifier<
       },
       name: 'string|required',
       nameLatin: 'string|required',
+      family: {
+        type: 'number',
+        columnType: 'integer',
+        columnName: 'familyClassifierId',
+        required: true,
+        populate: {
+          action: 'familyClassifiers.resolve',
+          params: {
+            scope: false,
+          },
+        },
+      },
       type: 'string',
       ...COMMON_FIELDS,
     },
@@ -53,6 +72,12 @@ export type SpeciesClassifier<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+  },
+  hooks: {
+    before: {
+      create: 'validateFamily',
+      update: 'validateFamily',
+    }
   },
   actions: {
     create: {
@@ -73,24 +98,36 @@ export type SpeciesClassifier<
   },
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
+
+  @Method
+  async validateFamily(ctx: Context<{name: string, latinName: string}, UserAuthMeta>) {
+    if(ctx.params.name === ctx.params.latinName) {
+      throwValidationError('Name and latin name cannot not be the same.');
+    }
+  }
   @Method
   async seedDB() {
+
+    await this.broker.waitForServices(['familyClassifiers']);
+    console.log('species seed started')
+
     const data = [
-      { name: 'Danielius', nameLatin: 'Dama dama' },
-      { name: 'Danielius', nameLatin: 'Cervus dama' },
-      { name: 'Taurieji elniai', nameLatin: 'Cervus elaphus' },
-      { name: 'Nykštukinė marmozetė', nameLatin: 'Callithrix (Cebuella) pygmaea' },
-      { name: 'Paprastoji marmozetė', nameLatin: 'Callithrix pygmaea' },
-      { name: 'Perukinė tamarina', nameLatin: 'Saguinus oedipus' },
-      { name: 'Raudonrankė tamarina', nameLatin: 'Saguinus midas' },
-      { name: 'Auksagalvė liūtbeždžionė', nameLatin: 'Leontopithecus chrysomelas' },
-      { name: 'Katinis lemūras', nameLatin: 'Lemur catta' },
-      { name: 'Senegalinis galagas', nameLatin: 'Galago senegalensis' },
-      { name: 'Nykštukinė voverinė skraiduolė', nameLatin: 'Petaurus breviceps' },
-      { name: 'Juodauodegis prerinis šuniukas', nameLatin: 'Cynomys ludovicianus' },
-      { name: 'Liūtas', nameLatin: 'Panthera Leo' },
-      { name: 'Guanakas', nameLatin: 'Lama guanicoe' },
+      { name: 'Danielius', nameLatin: 'Dama dama', family:  2},
+      { name: 'Danielius', nameLatin: 'Cervus dama', family: 2},
+      { name: 'Taurieji elniai', nameLatin: 'Cervus elaphus', family: 2 },
+      { name: 'Nykštukinė marmozetė', nameLatin: 'Callithrix (Cebuella) pygmaea', family: 4 },
+      { name: 'Paprastoji marmozetė', nameLatin: 'Callithrix pygmaea', family: 4 },
+      { name: 'Perukinė tamarina', nameLatin: 'Saguinus oedipus', family: 4 },
+      { name: 'Raudonrankė tamarina', nameLatin: 'Saguinus midas', family: 4 },
+      { name: 'Auksagalvė liūtbeždžionė', nameLatin: 'Leontopithecus chrysomelas', family: 4 },
+      { name: 'Katinis lemūras', nameLatin: 'Lemur catta', family: 5 },
+      { name: 'Senegalinis galagas', nameLatin: 'Galago senegalensis', family: 6 },
+      { name: 'Nykštukinė voverinė skraiduolė', nameLatin: 'Petaurus breviceps', family:7 },
+      { name: 'Juodauodegis prerinis šuniukas', nameLatin: 'Cynomys ludovicianus', family: 10 },
+      { name: 'Liūtas', nameLatin: 'Panthera Leo', family: 9 },
+      { name: 'Guanakas', nameLatin: 'Lama guanicoe', family: 11 },
     ];
     await this.createEntities(null, data);
+    console.log('species seed ended')
   }
 }
