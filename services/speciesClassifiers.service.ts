@@ -9,7 +9,7 @@ import {
   COMMON_FIELDS,
   COMMON_SCOPES,
   CommonFields,
-  CommonPopulates,
+  CommonPopulates, FieldHookCallback,
   RestrictionType,
   Table, throwValidationError,
 } from '../types';
@@ -52,7 +52,11 @@ export type SpeciesClassifier<
         secure: true,
       },
       name: 'string|required',
-      nameLatin: 'string|required',
+      nameLatin: {
+        type: 'string',
+        required: true,
+        validate: 'validateLatinName'
+      },
       family: {
         type: 'number',
         columnType: 'integer',
@@ -72,12 +76,6 @@ export type SpeciesClassifier<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
-  },
-  hooks: {
-    before: {
-      create: 'validateFamily',
-      update: 'validateFamily',
-    }
   },
   actions: {
     create: {
@@ -100,11 +98,14 @@ export type SpeciesClassifier<
 export default class SpeciesClassifiersService extends moleculer.Service {
 
   @Method
-  async validateSpecies(ctx: Context<{name: string, latinName: string}, UserAuthMeta>) {
-    if(ctx.params.name === ctx.params.latinName) {
-      throwValidationError('Name and latin name cannot not be the same.');
+  async validateLatinName({ ctx, value, entity }: FieldHookCallback) {
+    const name = ctx?.params?.name || entity?.name;
+    if(name && name.trim() === value.trim()) {
+      return'Latin name should not be the same as name';
     }
+    return true;
   }
+
   @Method
   async seedDB() {
     await this.broker.waitForServices(['familyClassifiers']);

@@ -9,7 +9,7 @@ import {
   COMMON_FIELDS,
   COMMON_SCOPES,
   CommonFields,
-  CommonPopulates,
+  CommonPopulates, FieldHookCallback,
   RestrictionType,
   Table,
   throwValidationError,
@@ -45,7 +45,11 @@ export type FamilyClassifier<
         secure: true,
       },
       name: 'string|required',
-      nameLatin: 'string|required',
+      nameLatin: {
+        type: 'string',
+        required: true,
+        validate: 'validateLatinName'
+      },
       ...COMMON_FIELDS,
     },
     scopes: {
@@ -61,10 +65,10 @@ export type FamilyClassifier<
   },
   actions: {
     create: {
-      auth: RestrictionType.ADMIN,
+      auth: RestrictionType.PUBLIC,
     },
     update: {
-      auth: RestrictionType.ADMIN,
+      auth: RestrictionType.PUBLIC,
     },
     remove: {
       auth: RestrictionType.ADMIN,
@@ -79,10 +83,12 @@ export type FamilyClassifier<
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
   @Method
-  async validateFamily(ctx: Context<{name: string, nameLatin: string}, UserAuthMeta>) {
-    if(ctx.params.name === ctx.params.nameLatin) {
-      throwValidationError('Name and latin name cannot not be the same.');
+  async validateLatinName({ ctx, value, entity }: FieldHookCallback) {
+    const name = ctx?.params?.name || entity?.name;
+    if(name && name.trim() === value.trim()) {
+      return'Latin name should not be the same as name';
     }
+    return true;
   }
   @Method
   async seedDB() {
