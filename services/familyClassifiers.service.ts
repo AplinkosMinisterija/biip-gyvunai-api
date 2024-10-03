@@ -65,10 +65,10 @@ export type FamilyClassifier<
   },
   actions: {
     create: {
-      auth: RestrictionType.PUBLIC,
+      auth: RestrictionType.ADMIN,
     },
     update: {
-      auth: RestrictionType.PUBLIC,
+      auth: RestrictionType.ADMIN,
     },
     remove: {
       auth: RestrictionType.ADMIN,

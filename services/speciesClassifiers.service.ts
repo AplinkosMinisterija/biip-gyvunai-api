@@ -11,10 +11,9 @@ import {
   CommonFields,
   CommonPopulates, FieldHookCallback,
   RestrictionType,
-  Table, throwValidationError,
+  Table,
 } from '../types';
 import {FamilyClassifier} from "./familyClassifiers.service";
-import {UserAuthMeta} from "./api.service";
 
 export enum SpeciesType {
   PROTECTED = 'PROTECTED',
