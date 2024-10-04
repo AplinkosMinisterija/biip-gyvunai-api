@@ -1,6 +1,6 @@
 'use strict';
 
-import moleculer from 'moleculer';
+import moleculer, {Context} from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
@@ -13,6 +13,7 @@ import {
   RestrictionType,
   Table,
 } from '../types';
+import {User} from "./users.service";
 
 
 interface Fields extends CommonFields {
@@ -47,6 +48,23 @@ export type FamilyClassifier<
         type: 'string',
         required: true,
         validate: 'validateLatinName'
+      },
+      species: {
+        type: 'array',
+        virtual: true,
+        readonly: true,
+        default: (): any[] => [],
+        async populate(ctx: Context, _values: any, families: User[]) {
+          return await Promise.all(
+              families.map(async (family) =>
+                  ctx.call('speciesClassifiers.find', {
+                    query: {
+                      family: family.id,
+                    },
+                  }),
+              ),
+          );
+        },
       },
       ...COMMON_FIELDS,
     },
