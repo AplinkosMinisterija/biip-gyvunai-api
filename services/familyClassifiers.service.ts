@@ -57,21 +57,15 @@ export type FamilyClassifier<
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
   },
-  hooks: {
-    before: {
-      create: 'validateFamily',
-      update: 'validateFamily',
-    }
-  },
   actions: {
     create: {
-      auth: RestrictionType.ADMIN,
+      auth: RestrictionType.PUBLIC,
     },
     update: {
-      auth: RestrictionType.ADMIN,
+      auth: RestrictionType.PUBLIC,
     },
     remove: {
-      auth: RestrictionType.ADMIN,
+      auth: RestrictionType.PUBLIC,
     },
     list: {
       auth: RestrictionType.PUBLIC,
@@ -79,6 +73,9 @@ export type FamilyClassifier<
     find: {
       auth: RestrictionType.PUBLIC,
     },
+    get: {
+      auth: RestrictionType.PUBLIC,
+    }
   },
 })
 export default class SpeciesClassifiersService extends moleculer.Service {

@@ -1,6 +1,6 @@
 'use strict';
 
-import moleculer, {Context} from 'moleculer';
+import moleculer from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
@@ -92,6 +92,9 @@ export type SpeciesClassifier<
     find: {
       auth: RestrictionType.PUBLIC,
     },
+    get: {
+      auth: RestrictionType.PUBLIC,
+    }
   },
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
