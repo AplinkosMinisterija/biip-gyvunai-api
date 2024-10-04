@@ -1,6 +1,6 @@
 'use strict';
 
-import moleculer, {Context} from 'moleculer';
+import moleculer from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
@@ -12,9 +12,7 @@ import {
   CommonPopulates, FieldHookCallback,
   RestrictionType,
   Table,
-  throwValidationError,
 } from '../types';
-import { UserAuthMeta } from "./api.service";
 
 
 interface Fields extends CommonFields {
