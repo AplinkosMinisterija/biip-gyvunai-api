@@ -88,18 +88,75 @@ export default class SpeciesClassifiersService extends moleculer.Service {
   @Method
   async seedDB() {
     const data = [
-      { name: 'Arkliniai', nameLatin: 'Equidae' },
-      { name: 'Elniniai', nameLatin: 'Cervidae' },
-      { name: 'Kiauniniai', nameLatin: 'Mustelids' },
-      { name: 'Kabiauodegės beždžionės', nameLatin: 'Cebidae' },
-      { name: 'Lemūriniai', nameLatin: 'Lemuridae' },
-      { name: 'Galaginiai', nameLatin: 'Galagidae' },
-      { name: 'Sterbliniai', nameLatin: 'Marsupialia' },
-      { name: 'Katiniai', nameLatin: 'Felidae' },
-      { name: 'Šuninių ', nameLatin: 'Canidae' },
-      { name: 'Voveriniai', nameLatin: 'Sciuridae' },
-      { name: 'Kupranugariniai', nameLatin: 'Camelidae' }
+      {
+        name: 'Elniniai',
+        nameLatin: 'Cervidae',
+        species: [
+          { name: 'Danielius', nameLatin: 'Dama dama' },
+          { name: 'Danielius', nameLatin: 'Cervus dama'},
+          { name: 'Taurieji elniai', nameLatin: 'Cervus elaphus'},
+        ]
+      },
+      {
+        name: 'Kabiauodegės beždžionės',
+        nameLatin: 'Cebidae',
+        species: [
+            { name: 'Nykštukinė marmozetė', nameLatin: 'Callithrix (Cebuella) pygmaea'  },
+            { name: 'Paprastoji marmozetė', nameLatin: 'Callithrix pygmaea'  },
+            { name: 'Perukinė tamarina', nameLatin: 'Saguinus oedipus'  },
+            { name: 'Raudonrankė tamarina', nameLatin: 'Saguinus midas' },
+            { name: 'Auksagalvė liūtbeždžionė', nameLatin: 'Leontopithecus chrysomelas' }
+        ]
+      },
+      {
+        name: 'Lemūriniai',
+        nameLatin: 'Lemuridae',
+        species: [
+          { name: 'Katinis lemūras', nameLatin: 'Lemur catta' }
+        ]
+      },
+      {
+        name: 'Galaginiai',
+        nameLatin: 'Galagidae',
+        species: [
+          { name: 'Senegalinis galagas', nameLatin: 'Galago senegalensis' }
+        ]
+      },
+      {
+        name: 'Katiniai',
+        nameLatin: 'Felidae',
+        species: [
+          { name: 'Liūtas', nameLatin: 'Panthera Leo' }
+        ]
+      },
+      {
+        name: 'Šuninių ',
+        nameLatin: 'Canidae',
+        species: [
+          { name: 'Juodauodegis prerinis šuniukas', nameLatin: 'Cynomys ludovicianus' }
+        ]
+      },
+      {
+        name: 'Voveriniai',
+        nameLatin: 'Sciuridae',
+        species:[
+          { name: 'Nykštukinė voverinė skraiduolė', nameLatin: 'Petaurus breviceps' }
+        ]
+      },
+      {
+        name: 'Kupranugariniai',
+        nameLatin: 'Camelidae',
+        species: [
+          { name: 'Guanakas', nameLatin: 'Lama guanicoe' }
+        ]
+      }
     ];
+    for (const f of data) {
+      const family =  await this.createEntity(null, f);
+      for (const s of f.species) {
+        await this.broker.call('speciesClassifiers.create', {...s, family: family.id})
+      }
+    }
     await this.createEntities(null, data);
   }
 }
