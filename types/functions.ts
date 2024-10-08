@@ -1,4 +1,6 @@
 import { get, isEmpty } from 'lodash';
+import moment from 'moment-timezone';
+import { AuthUserRole } from '../services/api.service';
 
 export const handlePagination = ({
   data,
@@ -113,4 +115,17 @@ export const handleFormatResponse = ({
     page,
     totalPages,
   };
+};
+
+export const isAdmin = (ctx: any) =>
+  [AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some((role) => role === ctx?.meta?.authUser?.type);
+
+export const formatDateTo = (date: Date | string) => {
+  const formattedDate = moment.utc(date).tz('Europe/Vilnius');
+  return formattedDate.endOf('day').toDate();
+};
+
+export const formatDateFrom = (date: Date | string) => {
+  const formattedDate = moment.utc(date).tz('Europe/Vilnius');
+  return formattedDate.startOf('day').toDate();
 };
