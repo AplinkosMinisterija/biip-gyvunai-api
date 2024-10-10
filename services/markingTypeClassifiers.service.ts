@@ -30,7 +30,7 @@ export type MarkingTypeClassifier<
   name: 'markingTypeClassifiers',
   mixins: [
     DbConnection({
-      collection: 'phylums',
+      collection: 'markingTypeClassifiers',
     }),
   ],
   settings: {
