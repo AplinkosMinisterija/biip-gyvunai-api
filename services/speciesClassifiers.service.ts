@@ -9,11 +9,12 @@ import {
   COMMON_FIELDS,
   COMMON_SCOPES,
   CommonFields,
-  CommonPopulates, FieldHookCallback,
+  CommonPopulates,
+  FieldHookCallback,
   RestrictionType,
   Table,
 } from '../types';
-import {FamilyClassifier} from "./familyClassifiers.service";
+import { FamilyClassifier } from './familyClassifiers.service';
 
 export enum SpeciesType {
   PROTECTED = 'PROTECTED',
@@ -39,9 +40,11 @@ export type SpeciesClassifier<
 
 @Service({
   name: 'speciesClassifiers',
-  mixins: [DbConnection({
-    collection: 'speciesClassifiers',
-  })],
+  mixins: [
+    DbConnection({
+      collection: 'speciesClassifiers',
+    }),
+  ],
   settings: {
     fields: {
       id: {
@@ -54,7 +57,7 @@ export type SpeciesClassifier<
       nameLatin: {
         type: 'string',
         required: true,
-        validate: 'validateLatinName'
+        validate: 'validateLatinName',
       },
       family: {
         type: 'number',
@@ -77,15 +80,6 @@ export type SpeciesClassifier<
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
   },
   actions: {
-    create: {
-      auth: RestrictionType.ADMIN,
-    },
-    update: {
-      auth: RestrictionType.ADMIN,
-    },
-    remove: {
-      auth: RestrictionType.ADMIN,
-    },
     list: {
       auth: RestrictionType.PUBLIC,
     },
@@ -94,18 +88,21 @@ export type SpeciesClassifier<
     },
     get: {
       auth: RestrictionType.PUBLIC,
-    }
+    },
   },
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
-
   @Method
-  async validateLatinName({ ctx, value, entity }: FieldHookCallback) {
+  async validateLatinName({ ctx, value, operation, entity }: FieldHookCallback) {
     const name = ctx?.params?.name || entity?.name;
-    if(name && name.trim() === value.trim()) {
-      return'Latin name should not be the same as name';
+    const nameLatin = value;
+
+    if (operation == 'create' || (entity && entity.nameLatin != value)) {
+      const found: number = await ctx.call('speciesClassifiers.count', {
+        query: { name, nameLatin },
+      });
+      if (found > 0) return `Name '${value}' is not available.`;
     }
     return true;
   }
-
 }

@@ -75,15 +75,6 @@ export type FamilyClassifier<
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
   },
   actions: {
-    create: {
-      auth: RestrictionType.PUBLIC,
-    },
-    update: {
-      auth: RestrictionType.PUBLIC,
-    },
-    remove: {
-      auth: RestrictionType.PUBLIC,
-    },
     list: {
       auth: RestrictionType.PUBLIC,
     },
