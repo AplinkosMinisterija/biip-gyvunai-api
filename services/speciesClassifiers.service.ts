@@ -98,7 +98,7 @@ export default class SpeciesClassifiersService extends moleculer.Service {
     const nameLatin = value;
 
     if (operation == 'create' || (entity && entity.nameLatin != value)) {
-      const found: number = await ctx.call('speciesClassifiers.count', {
+      const found: number = await this.broker.call('speciesClassifiers.count', {
         query: { name, nameLatin },
       });
       if (!!found) return `Name '${value}' is not available.`;
