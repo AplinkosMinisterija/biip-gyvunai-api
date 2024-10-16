@@ -93,10 +93,12 @@ export default class SpeciesClassifiersService extends moleculer.Service {
     const nameLatin = value;
 
     if (operation == 'create' || (entity && entity.nameLatin != value)) {
-      const found: number = await this.broker.call('familyClassifiers.count', {
-        query: { name, nameLatin },
-      });
-      if (!!found) return `Name '${value}' is not available.`;
+      if (name && nameLatin) {
+        const found: number = await this.countEntities(null, {
+          query: { name, nameLatin },
+        });
+        if (!!found) return `Name '${value}' is not available.`;
+      }
     }
     return true;
   }
@@ -154,12 +156,14 @@ export default class SpeciesClassifiersService extends moleculer.Service {
         species: [{ name: 'Guanakas', nameLatin: 'Lama guanicoe' }],
       },
     ];
-    for (const f of data) {
-      const family = await this.createEntity(null, f);
-      for (const s of f.species) {
-        await this.broker.call('speciesClassifiers.create', { ...s, family: family.id });
+
+    this.broker.waitForServices(['speciesClassifiers']).then(async () => {
+      for (const f of data) {
+        const family = await this.createEntity(null, f);
+        for (const s of f.species) {
+          await this.broker.call('speciesClassifiers.create', { ...s, family: family.id });
+        }
       }
-    }
-    await this.createEntities(null, data);
+    });
   }
 }
