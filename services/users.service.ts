@@ -443,19 +443,19 @@ export default class UsersService extends moleculer.Service {
 
   @Method
   async seedDB() {
-    await this.broker.waitForServices(['auth']);
-    const data: Array<any> = await this.broker.call('auth.getSeedData', {
-      timeout: 120 * 1000,
-    });
-    for (const authUser of data) {
-      await this.createEntity(null, {
-        firstName: authUser.firstName,
-        lastName: authUser.lastName,
-        type: authUser.type === 'SUPER_ADMIN' ? UserType.ADMIN : authUser.type,
-        email: authUser.email?.trim?.(),
-        phone: authUser.phone,
-        authUser: authUser.id,
-      });
-    }
+    // await this.broker.waitForServices(['auth']);
+    // const data: Array<any> = await this.broker.call('auth.getSeedData', {
+    //   timeout: 120 * 1000,
+    // });
+    // for (const authUser of data) {
+    //   await this.createEntity(null, {
+    //     firstName: authUser.firstName,
+    //     lastName: authUser.lastName,
+    //     type: authUser.type === 'SUPER_ADMIN' ? UserType.ADMIN : authUser.type,
+    //     email: authUser.email?.trim?.(),
+    //     phone: authUser.phone,
+    //     authUser: authUser.id,
+    //   });
+    // }
   }
 }
