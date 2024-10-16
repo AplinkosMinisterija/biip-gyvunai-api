@@ -96,7 +96,7 @@ export default class SpeciesClassifiersService extends moleculer.Service {
       const found: number = await ctx.call('familyClassifiers.count', {
         query: { name, nameLatin },
       });
-      if (found > 0) return `Name '${value}' is not available.`;
+      if (!!found) return `Name '${value}' is not available.`;
     }
     return true;
   }
