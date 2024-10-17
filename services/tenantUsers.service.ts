@@ -322,49 +322,49 @@ export default class TenantUsersService extends moleculer.Service {
 
   @Method
   async seedDB() {
-    // await this.broker.waitForServices(['auth', 'tenants', 'users']);
+    await this.broker.waitForServices(['auth', 'tenants', 'users']);
 
-    // const data: Array<any> = await this.broker.call('auth.getSeedData', {
-    //   timeout: 120 * 1000,
-    // });
-    // data?.map(async (authUser) => {
-    //   const user: User = await this.broker.call('users.findOne', {
-    //     query: {
-    //       authUser: authUser.id,
-    //     },
-    //   });
+    const data: Array<any> = await this.broker.call('auth.getSeedData', {
+      timeout: 120 * 1000,
+    });
+    data?.map(async (authUser) => {
+      const user: User = await this.broker.call('users.findOne', {
+        query: {
+          authUser: authUser.id,
+        },
+      });
 
-    //   if (authUser.groups?.length) {
-    //     for (const group of authUser.groups) {
-    //       if (group.id) {
-    //         const tenant: Tenant = await this.broker.call('tenants.findOne', {
-    //           query: {
-    //             authGroup: group.id,
-    //           },
-    //         });
+      if (authUser.groups?.length) {
+        for (const group of authUser.groups) {
+          if (group.id) {
+            const tenant: Tenant = await this.broker.call('tenants.findOne', {
+              query: {
+                authGroup: group.id,
+              },
+            });
 
-    //         if (!tenant) {
-    //           return;
-    //         }
+            if (!tenant) {
+              return;
+            }
 
-    //         let role = TenantUserRole.USER;
-    //         if (group.role === AuthGroupRole.ADMIN) {
-    //           role = TenantUserRole.OWNER;
-    //         }
+            let role = TenantUserRole.USER;
+            if (group.role === AuthGroupRole.ADMIN) {
+              role = TenantUserRole.OWNER;
+            }
 
-    //         await this.createEntity(null, {
-    //           user: user.id,
-    //           tenant: tenant.id,
-    //           role,
-    //           fullName: user.fullName,
-    //           email: user.email,
-    //           phone: user.phone,
-    //           address: user.address,
-    //         });
-    //       }
-    //     }
-    //   }
-    // });
+            await this.createEntity(null, {
+              user: user.id,
+              tenant: tenant.id,
+              role,
+              fullName: user.fullName,
+              email: user.email,
+              phone: user.phone,
+              address: user.address,
+            });
+          }
+        }
+      }
+    });
   }
 
   @Event()

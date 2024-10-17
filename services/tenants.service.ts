@@ -234,36 +234,36 @@ export default class TenantsService extends moleculer.Service {
 
   @Method
   async seedDB() {
-    // await this.broker.waitForServices(['auth']);
+    await this.broker.waitForServices(['auth']);
 
-    // const data: Array<any> = await this.broker.call('auth.getSeedData', {
-    //   timeout: 120 * 1000,
-    // });
+    const data: Array<any> = await this.broker.call('auth.getSeedData', {
+      timeout: 120 * 1000,
+    });
 
-    // const authGroupsMap: Record<number, any> = {};
-    // for (const authUser of data) {
-    //   if (authUser.groups?.length) {
-    //     for (const group of authUser.groups) {
-    //       if (!group.id) continue;
+    const authGroupsMap: Record<number, any> = {};
+    for (const authUser of data) {
+      if (authUser.groups?.length) {
+        for (const group of authUser.groups) {
+          if (!group.id) continue;
 
-    //       authGroupsMap[group.id] = group;
-    //     }
-    //   }
-    // }
+          authGroupsMap[group.id] = group;
+        }
+      }
+    }
 
-    // for (const authGroupKey in authGroupsMap) {
-    //   const authGroup = authGroupsMap[authGroupKey];
-    //   if (authGroup.companyCode) {
-    //     await this.createEntity(null, {
-    //       name: authGroup.name,
-    //       email: authGroup.companyEmail,
-    //       phone: authGroup.companyPhone,
-    //       code: authGroup.companyCode,
-    //       address: authGroup.address,
-    //       authGroup: authGroup.id,
-    //     });
-    //   }
-    // }
+    for (const authGroupKey in authGroupsMap) {
+      const authGroup = authGroupsMap[authGroupKey];
+      if (authGroup.companyCode) {
+        await this.createEntity(null, {
+          name: authGroup.name,
+          email: authGroup.companyEmail,
+          phone: authGroup.companyPhone,
+          code: authGroup.companyCode,
+          address: authGroup.address,
+          authGroup: authGroup.id,
+        });
+      }
+    }
   }
 
   @Action()
