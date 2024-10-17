@@ -232,38 +232,66 @@ export default class TenantsService extends moleculer.Service {
     return ctx;
   }
 
-  @Method
-  async seedDB() {
-    await this.broker.waitForServices(['auth']);
+  @Action({
+    params: {
+      authGroup: 'any',
+      email: {
+        type: 'string',
+        optional: true,
+      },
+      phone: {
+        type: 'string',
+        optional: true,
+      },
+      name: {
+        type: 'string',
+        optional: true,
+      },
+      update: {
+        type: 'boolean',
+        optional: true,
+        default: false,
+      },
+    },
+  })
+  async findOrCreate(
+    ctx: Context<{
+      authGroup: any;
+      update?: boolean;
+      name?: string;
+      phone?: string;
+      email?: string;
+    }>,
+  ) {
+    const { authGroup, update, name, phone, email } = ctx.params;
+    if (!authGroup || !authGroup.id) return;
 
-    const data: Array<any> = await this.broker.call('auth.getSeedData', {
-      timeout: 120 * 1000,
+    const tenant: Tenant = await ctx.call('tenants.findOne', {
+      query: {
+        authGroup: authGroup.id,
+      },
     });
 
-    const authGroupsMap: Record<number, any> = {};
-    for (const authUser of data) {
-      if (authUser.groups?.length) {
-        for (const group of authUser.groups) {
-          if (!group.id) continue;
+    if (!update && tenant && tenant.id) return tenant;
 
-          authGroupsMap[group.id] = group;
-        }
-      }
+    const dataToSave = {
+      name: name || authGroup.name,
+      email: email || authGroup.companyEmail,
+      phone: phone || authGroup.companyPhone,
+      code: authGroup.companyCode,
+    };
+
+    if (tenant && tenant.id) {
+      return ctx.call('tenants.update', {
+        id: tenant.id,
+        ...dataToSave,
+      });
     }
 
-    for (const authGroupKey in authGroupsMap) {
-      const authGroup = authGroupsMap[authGroupKey];
-      if (authGroup.companyCode) {
-        await this.createEntity(null, {
-          name: authGroup.name,
-          email: authGroup.companyEmail,
-          phone: authGroup.companyPhone,
-          code: authGroup.companyCode,
-          address: authGroup.address,
-          authGroup: authGroup.id,
-        });
-      }
-    }
+    return ctx.call('tenants.create', {
+      authGroup: authGroup.id,
+      ...dataToSave,
+    });
   }
 
   @Action()
