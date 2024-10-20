@@ -20,7 +20,7 @@ exports.up = function (knex) {
     )
     .alterTable('records', (table) => {
       table.enu('gender', ['MALE', 'FEMALE', 'UNIDENTIFIED']);
-      table.timestamp('confirmationAt');
+      table.timestamp('confirmAt');
     });
 };
 
@@ -46,6 +46,6 @@ exports.down = function (knex) {
     )
     .alterTable('records', (table) => {
       table.dropColumn('gender');
-      table.dropColumn('confirmationAt');
+      table.dropColumn('confirmAt');
     });
 };
