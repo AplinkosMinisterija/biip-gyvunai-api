@@ -12,7 +12,6 @@ import {
 } from '../types';
 import { TenantUser, TenantUserRole } from './tenantUsers.service';
 
-import { map } from 'lodash';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import { AuthUserRole, UserAuthMeta } from './api.service';
@@ -441,21 +440,122 @@ export default class UsersService extends moleculer.Service {
     };
   }
 
+  @Action({
+    params: {
+      authUser: 'any',
+      update: {
+        type: 'boolean',
+        default: false,
+      },
+      firstName: {
+        type: 'string',
+        optional: true,
+      },
+      lastName: {
+        type: 'string',
+        optional: true,
+      },
+      email: {
+        type: 'string',
+        optional: true,
+      },
+      phone: {
+        type: 'string',
+        optional: true,
+      },
+    },
+  })
+  async findOrCreate(
+    ctx: Context<{
+      authUser: any;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      update?: boolean;
+    }>,
+  ) {
+    const { authUser, update, firstName, lastName, email, phone } = ctx.params;
+    if (!authUser || !authUser.id) return;
+
+    const authUserIsAdmin = ['SUPER_ADMIN', UserType.ADMIN].includes(authUser.type);
+
+    const user: User = await this.findEntity(ctx, {
+      query: {
+        authUser: authUser.id,
+      },
+    });
+
+    if (!update && user && user.id) return user;
+
+    const dataToSave = {
+      firstName: firstName || authUser.firstName,
+      lastName: lastName || authUser.lastName,
+      type: authUserIsAdmin ? UserType.ADMIN : UserType.USER,
+      email: email || authUser.email,
+      phone: phone || authUser.phone,
+    };
+
+    // let user to customize his phone and email
+    if (user?.email) {
+      delete dataToSave.email;
+    }
+    if (user?.phone) {
+      delete dataToSave.phone;
+    }
+
+    if (user?.id) {
+      return this.updateEntity(ctx, {
+        id: user.id,
+        ...dataToSave,
+      });
+    }
+
+    return this.createEntity(ctx, {
+      authUser: authUser.id,
+      ...dataToSave,
+    });
+  }
+
+  @Action({
+    params: {
+      authUser: 'any',
+      authUserGroups: 'array',
+    },
+  })
+  async createUserWithTenantsIfNeeded(ctx: Context<{ authUser: any; authUserGroups: any[] }>) {
+    const { authUser, authUserGroups } = ctx.params;
+    const user: User = await this.actions.findOrCreate({
+      authUser: authUser,
+      update: true,
+    });
+
+    if (authUserGroups && authUserGroups.length && user?.id) {
+      for (const group of authUserGroups) {
+        await ctx.call('tenantUsers.createRelationshipsIfNeeded', {
+          authGroup: group,
+          userId: user.id,
+        });
+      }
+    }
+
+    return user;
+  }
+
   @Method
   async seedDB() {
-    // await this.broker.waitForServices(['auth']);
-    // const data: Array<any> = await this.broker.call('auth.getSeedData', {
-    //   timeout: 120 * 1000,
-    // });
-    // for (const authUser of data) {
-    //   await this.createEntity(null, {
-    //     firstName: authUser.firstName,
-    //     lastName: authUser.lastName,
-    //     type: authUser.type === 'SUPER_ADMIN' ? UserType.ADMIN : authUser.type,
-    //     email: authUser.email?.trim?.(),
-    //     phone: authUser.phone,
-    //     authUser: authUser.id,
-    //   });
-    // }
+    await this.broker.waitForServices(['tenants', 'tenantUsers']);
+    const usersCount: number = await this.countEntities(null, {});
+
+    if (!usersCount) {
+      const data: any[] = await this.broker.call('auth.getSeedData');
+
+      for (const item of data) {
+        await this.actions.createUserWithTenantsIfNeeded({
+          authUser: item,
+          authUserGroups: item.groups,
+        });
+      }
+    }
   }
 }

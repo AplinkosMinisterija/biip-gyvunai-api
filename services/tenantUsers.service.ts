@@ -320,51 +320,77 @@ export default class TenantUsersService extends moleculer.Service {
     });
   }
 
-  @Method
-  async seedDB() {
-    // await this.broker.waitForServices(['auth', 'tenants', 'users']);
+  @Action({
+    params: {
+      authGroup: 'any',
+      userId: {
+        type: 'number',
+        convert: true,
+      },
+      companyEmail: {
+        type: 'string',
+        optional: true,
+      },
+      companyPhone: {
+        type: 'string',
+        optional: true,
+      },
+      companyName: {
+        type: 'string',
+        optional: true,
+      },
+    },
+  })
+  async createRelationshipsIfNeeded(
+    ctx: Context<{
+      authGroup: any;
+      userId: number;
+      companyEmail?: string;
+      companyPhone?: string;
+      companyName?: string;
+    }>,
+  ) {
+    const { authGroup, userId, companyEmail, companyPhone, companyName } = ctx.params;
 
-    // const data: Array<any> = await this.broker.call('auth.getSeedData', {
-    //   timeout: 120 * 1000,
-    // });
-    // data?.map(async (authUser) => {
-    //   const user: User = await this.broker.call('users.findOne', {
-    //     query: {
-    //       authUser: authUser.id,
-    //     },
-    //   });
+    if (!authGroup?.id) return;
 
-    //   if (authUser.groups?.length) {
-    //     for (const group of authUser.groups) {
-    //       if (group.id) {
-    //         const tenant: Tenant = await this.broker.call('tenants.findOne', {
-    //           query: {
-    //             authGroup: group.id,
-    //           },
-    //         });
+    const tenant: Tenant = await ctx.call('tenants.findOrCreate', {
+      authGroup: authGroup,
+      email: companyEmail,
+      phone: companyPhone,
+      name: companyName,
+    });
 
-    //         if (!tenant) {
-    //           return;
-    //         }
+    if (!tenant || !tenant.id) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Cannot create or update tenant.',
+        401,
+        'UNAUTHORIZED',
+      );
+    }
 
-    //         let role = TenantUserRole.USER;
-    //         if (group.role === AuthGroupRole.ADMIN) {
-    //           role = TenantUserRole.OWNER;
-    //         }
+    const query = {
+      tenant: tenant.id,
+      user: userId,
+    };
 
-    //         await this.createEntity(null, {
-    //           user: user.id,
-    //           tenant: tenant.id,
-    //           role,
-    //           fullName: user.fullName,
-    //           email: user.email,
-    //           phone: user.phone,
-    //           address: user.address,
-    //         });
-    //       }
-    //     }
-    //   }
-    // });
+    const tenantUser: TenantUser = await ctx.call('tenantUsers.findOne', {
+      query,
+    });
+
+    if (tenantUser && !!authGroup?.role && authGroup.role === tenantUser.role) return tenantUser;
+
+    if (tenantUser?.id) {
+      return ctx.call('tenantUsers.update', {
+        id: tenantUser.id,
+        role: authGroup.role || TenantUserRole.USER,
+      });
+    }
+
+    return ctx.call('tenantUsers.create', {
+      ...query,
+      role: authGroup.role || TenantUserRole.USER,
+    });
   }
 
   @Event()
