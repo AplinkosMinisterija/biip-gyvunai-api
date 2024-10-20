@@ -17,6 +17,7 @@ import {
   CommonFields,
   CommonPopulates,
   FieldHookCallback,
+  Gender,
   GroupByType,
   RestrictionType,
   Table,
@@ -27,11 +28,6 @@ import { Record, RecordType } from './records.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
-
-enum Gender {
-  MALE = 'MALE',
-  FEMALE = 'FEMALE',
-}
 
 interface Fields extends CommonFields {
   id: number;
@@ -109,7 +105,10 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
           action: 'speciesClassifiers.resolve',
         },
       },
-      gender: 'string',
+      gender: {
+        type: 'string',
+        enum: Object.values(Gender),
+      },
       certificateNumber: 'string',
       address: 'string',
       municipality: 'any',
@@ -273,7 +272,10 @@ export default class FosteredAnimalsService extends moleculer.Service {
     rest: 'POST /',
     params: {
       speciesClassifier: 'number|concert',
-      gender: 'string',
+      gender: {
+        type: 'string',
+        enum: Object.values(Gender),
+      },
       certificateNumber: 'string|optional',
       address: 'string',
       municipality: 'any',
