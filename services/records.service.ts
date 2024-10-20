@@ -13,6 +13,7 @@ import {
   COMMON_SCOPES,
   CommonFields,
   CommonPopulates,
+  Gender,
   MultipartMeta,
   Table,
 } from '../types';
@@ -38,6 +39,7 @@ export enum RecordType {
   OBTAINMENT_OF_FOSTERED_ANIMAL = 'OBTAINMENT_OF_FOSTERED_ANIMAL',
   RELEASE = 'RELEASE',
   TRANSFER = 'TRANSFER',
+  GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
 }
 
 export enum DeathReason {
@@ -172,7 +174,16 @@ export type Record<
           action: 'speciesClassifiers.resolve',
         },
       },
-      type: 'string|required',
+      type: {
+        type: 'string',
+        required: true,
+        enum: Object.values(RecordType),
+      },
+      gender: {
+        type: 'string',
+        enum: [Gender.FEMALE, Gender.FEMALE, Gender.UNIDENTIFIED],
+      },
+      confirmationAt: 'string',
       date: 'string',
       numberOfAnimals: 'number',
       note: 'string',
