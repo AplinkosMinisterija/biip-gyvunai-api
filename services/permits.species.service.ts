@@ -15,11 +15,6 @@ import {
 import { FamilyClassifier } from './familyClassifiers.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 
-export enum SpeciesType {
-  PROTECTED = 'PROTECTED',
-  INVASIVE = 'INVASIVE',
-}
-
 interface Fields extends CommonFields {
   id: number;
   species: SpeciesClassifier['id'];
