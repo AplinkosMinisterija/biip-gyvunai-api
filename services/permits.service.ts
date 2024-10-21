@@ -27,6 +27,7 @@ import { UserAuthMeta } from './api.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
 import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
+import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
@@ -181,7 +182,7 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
         type: 'array',
         populate: {
           keyField: 'id',
-          action: 'permitSpecies.populateByProp',
+          action: 'permits.species.populateByProp',
           params: {
             populate: 'species,family',
             mappingMulti: true,
@@ -235,12 +236,24 @@ export default class PermitsService extends moleculer.Service {
   async createOrUpdate(
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
   ) {
-    const { permitSpecies, id } = ctx.params;
+    const id = ctx?.params?.id;
+    const permitSpecies = ctx?.params?.permitSpecies || [];
 
-    const permit: PermitSpecies = await ctx.call(
-      id ? 'permits.update' : 'permits.create',
-      ctx.params,
-    );
+    for (const species of permitSpecies) {
+      if (species.species) {
+        const speciesData: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
+          id: species.species,
+        });
+
+        if (speciesData.family !== species.family) {
+          throwValidationError('The species does not belong to the specified family.');
+        }
+      }
+    }
+
+    const permit: PermitSpecies = await ctx.call(id ? 'permits.update' : 'permits.create', {
+      ...ctx.params,
+    });
 
     await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
 
@@ -405,8 +418,8 @@ export default class PermitsService extends moleculer.Service {
       return throwBadRequestError('Permit already exists');
     }
     if (!isAdmin(ctx)) {
-      const profile = ctx.meta.profile;
-      const userId = ctx.meta.user.id;
+      const profile = ctx?.meta?.profile;
+      const userId = ctx?.meta?.user?.id;
       ctx.params.tenant = profile || null;
       ctx.params.user = !profile ? userId : null;
     }
@@ -531,32 +544,31 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  async saveOrUpdateSpeciesForPermit(id: number, permitSpeciesList: PermitSpecies[]) {
-    const savedIds: number[] = [];
+  async saveOrUpdateSpeciesForPermit(permitId: number, permitSpeciesList: PermitSpecies[]) {
+    const speciesIdsToSave: number[] = [];
 
     for (const species of permitSpeciesList) {
-      const createdSpecies: PermitSpecies = await this.broker.call(
+      const updatedSpecies: PermitSpecies = await this.broker.call(
         'permits.species.createOrUpdate',
-        {
-          ...species,
-          permit: id,
-        },
+        { ...species, permit: permitId },
       );
 
-      savedIds.push(createdSpecies.id);
+      speciesIdsToSave.push(updatedSpecies.id);
     }
 
-    const allSpecies: PermitSpecies[] = await this.broker.call('permits.species.find', {
-      query: {
-        permit: id,
-      },
+    const existingSpecies: PermitSpecies[] = await this.broker.call('permits.species.find', {
+      query: { permit: permitId },
     });
 
-    const deletingIds: number[] = allSpecies
+    const speciesIdsToDelete: number[] = existingSpecies
       .map((species) => species.id)
-      .filter((speciesId) => !savedIds.includes(speciesId));
+      .filter((speciesId) => !speciesIdsToSave.includes(speciesId));
 
-    deletingIds.map((speciesId) => this.broker.call('permits.species.remove', { id: speciesId }));
+    await Promise.all(
+      speciesIdsToDelete.map(
+        async (speciesId) => await this.broker.call('permits.species.remove', { id: speciesId }),
+      ),
+    );
   }
 
   @Method
