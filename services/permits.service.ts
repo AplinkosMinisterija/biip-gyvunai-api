@@ -25,6 +25,7 @@ import {
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
 import { UserAuthMeta } from './api.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
+import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
@@ -50,6 +51,8 @@ interface Fields extends CommonFields {
   fencedArea: number;
   protectedTerritory: boolean;
   note: string;
+  info: string;
+  cadastralIds: string[];
   specialConditions: string;
   tenant: number;
   user: number;
@@ -142,7 +145,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       type: 'string',
       address: 'string',
       municipality: 'object',
-      cadastralId: 'string',
+      cadastralIds: {
+        type: 'array',
+        items: 'string',
+      },
       forest: 'boolean',
       fencingOffDate: 'string',
       fencedArea: 'number',
@@ -171,14 +177,15 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
         },
       },
       permitSpecies: {
+        virtual: true,
         type: 'array',
-        raw: true,
-        items: {
-          type: 'object',
-          properties: {
-            id: 'number',
-            name: 'string',
-            nameLatin: 'string',
+        populate: {
+          keyField: 'id',
+          action: 'permitSpecies.populateByProp',
+          params: {
+            populate: 'species,family',
+            mappingMulti: true,
+            queryKey: 'permit',
           },
         },
       },
@@ -201,6 +208,14 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
     defaultPopulates: ['issuer', 'geom'],
   },
+  actions: {
+    create: {
+      rest: null,
+    },
+    update: {
+      rest: null,
+    },
+  },
   hooks: {
     before: {
       create: 'beforeCreate',
@@ -214,6 +229,24 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  @Action({
+    rest: ['POST /', 'PATCH /:id'],
+  })
+  async createOrUpdate(
+    ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
+  ) {
+    const { permitSpecies, id } = ctx.params;
+
+    const research: PermitSpecies = await ctx.call(
+      id ? 'permits.update' : 'permits.create',
+      ctx.params,
+    );
+
+    await this.saveOrUpdateSpeciesForPermit(research.id, permitSpecies);
+
+    return ctx.call('permits.resolve', { id: research.id });
+  }
+
   @Action({
     rest: <RestSchema>{
       method: 'GET',
@@ -495,6 +528,35 @@ export default class PermitsService extends moleculer.Service {
       page,
       pageSize,
     });
+  }
+
+  @Method
+  async saveOrUpdateSpeciesForPermit(id: number, permitSpeciesList: PermitSpecies[]) {
+    const savedIds: number[] = [];
+
+    for (const species of permitSpeciesList) {
+      const createdSpecies: PermitSpecies = await this.broker.call(
+        'permits.species.createOrUpdate',
+        {
+          ...species,
+          research: id,
+        },
+      );
+
+      savedIds.push(createdSpecies.id);
+    }
+
+    const allSpecies: PermitSpecies[] = await this.broker.call('permits.species.find', {
+      query: {
+        research: id,
+      },
+    });
+
+    const deletingIds: number[] = allSpecies
+      .map((species) => species.id)
+      .filter((speciesId) => !savedIds.includes(speciesId));
+
+    deletingIds.map((speciesId) => this.broker.call('permits.species.remove', { id: speciesId }));
   }
 
   @Method

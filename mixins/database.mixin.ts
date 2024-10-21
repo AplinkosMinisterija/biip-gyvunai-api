@@ -1,8 +1,8 @@
 'use strict';
 
+import { DatabaseMixin } from '@aplinkosministerija/moleculer-accounts';
 import _ from 'lodash';
 import filtersMixin from 'moleculer-knex-filters';
-const DbService = require('@moleculer/database').Service;
 const knex = require('../knexfile');
 
 export default function (opts: any = {}) {
@@ -17,7 +17,7 @@ export default function (opts: any = {}) {
   opts = _.defaultsDeep(opts, { adapter, createActions: { replace: false } }, { cache: false });
 
   const schema = {
-    mixins: [DbService(opts), filtersMixin()],
+    mixins: [DatabaseMixin(opts.config || config, opts), filtersMixin()],
 
     actions: {
       findOne(ctx: any) {
