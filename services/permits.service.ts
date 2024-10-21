@@ -240,12 +240,12 @@ export default class PermitsService extends moleculer.Service {
     const permitSpecies = ctx?.params?.permitSpecies || [];
 
     for (const species of permitSpecies) {
-      if (species.species) {
+      if (!!species?.species) {
         const speciesData: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
           id: species.species,
         });
 
-        if (speciesData.family !== species.family) {
+        if (speciesData?.family !== species?.family) {
           throwValidationError('The species does not belong to the specified family.');
         }
       }
