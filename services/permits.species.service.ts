@@ -47,6 +47,12 @@ export type PermitSpecies<
         primaryKey: true,
         secure: true,
       },
+      permit: {
+        type: 'number',
+        columnType: 'integer',
+        columnName: 'permitId',
+        populate: 'permits.resolve',
+      },
       species: {
         type: 'number',
         columnType: 'integer',

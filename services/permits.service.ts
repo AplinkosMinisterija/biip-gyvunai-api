@@ -237,14 +237,14 @@ export default class PermitsService extends moleculer.Service {
   ) {
     const { permitSpecies, id } = ctx.params;
 
-    const research: PermitSpecies = await ctx.call(
+    const permit: PermitSpecies = await ctx.call(
       id ? 'permits.update' : 'permits.create',
       ctx.params,
     );
 
-    await this.saveOrUpdateSpeciesForPermit(research.id, permitSpecies);
+    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
 
-    return ctx.call('permits.resolve', { id: research.id });
+    return ctx.call('permits.resolve', { id: permit.id });
   }
 
   @Action({
@@ -539,7 +539,7 @@ export default class PermitsService extends moleculer.Service {
         'permits.species.createOrUpdate',
         {
           ...species,
-          research: id,
+          permit: id,
         },
       );
 
@@ -548,7 +548,7 @@ export default class PermitsService extends moleculer.Service {
 
     const allSpecies: PermitSpecies[] = await this.broker.call('permits.species.find', {
       query: {
-        research: id,
+        permit: id,
       },
     });
 

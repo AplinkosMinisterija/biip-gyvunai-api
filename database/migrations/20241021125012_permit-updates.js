@@ -5,6 +5,7 @@ exports.up = function (knex) {
       table.increments('id');
       table.integer('familyClassifierId').unsigned();
       table.integer('speciesClassifierId').unsigned();
+      table.integer('permitId').unsigned();
       commonFields(table);
     })
     .alterTable('permits', (table) => {
