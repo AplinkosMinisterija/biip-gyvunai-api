@@ -40,6 +40,13 @@ export interface CommonPopulates {
   deletedBy: User;
 }
 
+export enum Gender {
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+  CLARIFIED_LATER = 'CLARIFIED_LATER',
+  UNIDENTIFIED = 'UNIDENTIFIED',
+}
+
 export const COMMON_FIELDS = {
   createdBy: {
     type: 'number',
