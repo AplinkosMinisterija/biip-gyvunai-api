@@ -251,13 +251,11 @@ export default class PermitsService extends moleculer.Service {
         throwValidationError('Duplicate entry found');
       }
 
-      if (speciesId) {
-        uniqueFamilySpecies[familySpeciesKey] = 1;
-      }
-
       uniqueFamily[familyKey] = 1;
 
       if (speciesId) {
+        uniqueFamilySpecies[familySpeciesKey] = 1;
+
         const speciesData: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
           id: speciesId,
         });
