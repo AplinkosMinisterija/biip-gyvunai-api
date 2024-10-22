@@ -239,13 +239,30 @@ export default class PermitsService extends moleculer.Service {
     const id = ctx?.params?.id;
     const permitSpecies = ctx?.params?.permitSpecies || [];
 
+    const uniqueFamilySpecies: any = {};
+    const uniqueFamily: any = {};
+
     for (const species of permitSpecies) {
-      if (!!species?.species) {
+      const { family, species: speciesId } = species;
+      const familyKey = family;
+      const familySpeciesKey = `${family}-${speciesId}`;
+
+      if (!speciesId ? uniqueFamily[familyKey] : uniqueFamilySpecies[familySpeciesKey]) {
+        throwValidationError('Duplicate entry found');
+      }
+
+      if (speciesId) {
+        uniqueFamilySpecies[familySpeciesKey] = 1;
+      }
+
+      uniqueFamily[familyKey] = 1;
+
+      if (speciesId) {
         const speciesData: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
-          id: species.species,
+          id: speciesId,
         });
 
-        if (speciesData?.family !== species?.family) {
+        if (speciesData?.family !== family) {
           throwValidationError('The species does not belong to the specified family.');
         }
       }

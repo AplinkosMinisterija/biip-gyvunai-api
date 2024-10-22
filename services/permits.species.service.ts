@@ -51,6 +51,7 @@ export type PermitSpecies<
         type: 'number',
         columnType: 'integer',
         columnName: 'permitId',
+        required: true,
         populate: 'permits.resolve',
       },
       species: {
@@ -76,15 +77,20 @@ export type PermitSpecies<
 })
 export default class PermitSpeciesService extends moleculer.Service {
   @Action()
-  async createOrUpdate(ctx: Context<{ id: number; species: number; family: number }>) {
-    const { family, species } = ctx.params;
+  async createOrUpdate(
+    ctx: Context<{ id: number; species: number; family: number; permit: number }>,
+  ) {
+    const { family, species, permit } = ctx.params;
     let { id } = ctx.params;
-    if (family) {
+    if (family && permit) {
+      const query: any = { family, permit };
+
+      if (species) {
+        query.species = species;
+      }
+
       const permitSpecies: PermitSpecies = await ctx.call('permits.species.findOne', {
-        query: {
-          family,
-          species,
-        },
+        query,
       });
 
       id = permitSpecies?.id;
