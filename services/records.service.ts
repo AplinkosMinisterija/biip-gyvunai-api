@@ -181,7 +181,7 @@ export type Record<
       },
       gender: {
         type: 'string',
-        enum: [Gender.FEMALE, Gender.FEMALE, Gender.UNIDENTIFIED],
+        enum: [Gender.FEMALE, Gender.FEMALE],
       },
       date: 'string',
       numberOfAnimals: 'number',
@@ -278,7 +278,7 @@ export default class RecordsService extends moleculer.Service {
       },
       gender: {
         type: 'string',
-        enum: [Gender.FEMALE, Gender.FEMALE, Gender.UNIDENTIFIED],
+        enum: [Gender.FEMALE, Gender.FEMALE],
         required: false,
       },
       date: 'string|optional',

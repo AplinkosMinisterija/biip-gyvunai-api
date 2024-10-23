@@ -19,7 +19,7 @@ exports.up = function (knex) {
       CHECK ("gender" IN ('MALE', 'FEMALE', 'UNIDENTIFIED', 'CLARIFIED_LATER'))`,
     )
     .alterTable('records', (table) => {
-      table.enu('gender', ['MALE', 'FEMALE', 'UNIDENTIFIED']);
+      table.enu('gender', ['MALE', 'FEMALE']);
     });
 };
 
