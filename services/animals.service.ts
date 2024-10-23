@@ -12,6 +12,7 @@ import {
   CommonFields,
   CommonPopulates,
   FieldHookCallback,
+  Gender,
   Table,
 } from '../types';
 import { AuthUserRole, UserAuthMeta } from './api.service';
@@ -88,7 +89,10 @@ export type Animal<
           action: 'speciesClassifiers.resolve',
         },
       },
-      gender: 'string',
+      gender: {
+        type: 'string',
+        enum: Object.values(Gender),
+      },
       certificate: 'string',
       tenant: {
         type: 'number',
@@ -206,7 +210,10 @@ export default class AnimalsService extends moleculer.Service {
     rest: 'POST /',
     params: {
       species: 'number',
-      gender: 'string',
+      gender: {
+        type: 'string',
+        enum: Object.values(Gender),
+      },
       birthDate: 'string',
       certificate: 'string|optional',
       markingType: 'number|optional',
