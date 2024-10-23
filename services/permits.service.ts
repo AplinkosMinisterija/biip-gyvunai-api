@@ -25,7 +25,9 @@ import {
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
 import { UserAuthMeta } from './api.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
+import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
+import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
@@ -50,6 +52,8 @@ interface Fields extends CommonFields {
   fencedArea: number;
   protectedTerritory: boolean;
   note: string;
+  info: string;
+  cadastralIds: string[];
   specialConditions: string;
   tenant: number;
   user: number;
@@ -142,7 +146,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       type: 'string',
       address: 'string',
       municipality: 'object',
-      cadastralId: 'string',
+      cadastralIds: {
+        type: 'array',
+        items: 'string',
+      },
       forest: 'boolean',
       fencingOffDate: 'string',
       fencedArea: 'number',
@@ -171,14 +178,15 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
         },
       },
       permitSpecies: {
+        virtual: true,
         type: 'array',
-        raw: true,
-        items: {
-          type: 'object',
-          properties: {
-            id: 'number',
-            name: 'string',
-            nameLatin: 'string',
+        populate: {
+          keyField: 'id',
+          action: 'permits.species.populateByProp',
+          params: {
+            populate: 'species,family',
+            mappingMulti: true,
+            queryKey: 'permit',
           },
         },
       },
@@ -201,6 +209,14 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
     defaultPopulates: ['issuer', 'geom'],
   },
+  actions: {
+    create: {
+      rest: null,
+    },
+    update: {
+      rest: null,
+    },
+  },
   hooks: {
     before: {
       create: 'beforeCreate',
@@ -214,6 +230,51 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  @Action({
+    rest: ['POST /', 'PATCH /:id'],
+  })
+  async createOrUpdate(
+    ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
+  ) {
+    const id = ctx?.params?.id;
+    const permitSpecies = ctx?.params?.permitSpecies || [];
+
+    const uniqueFamilySpecies: any = {};
+    const uniqueFamily: any = {};
+
+    for (const species of permitSpecies) {
+      const { family, species: speciesId } = species;
+      const familyKey = family;
+      const familySpeciesKey = `${family}-${speciesId}`;
+
+      if (!speciesId ? uniqueFamily[familyKey] : uniqueFamilySpecies[familySpeciesKey]) {
+        throwValidationError('Duplicate entry found');
+      }
+
+      uniqueFamily[familyKey] = 1;
+
+      if (speciesId) {
+        uniqueFamilySpecies[familySpeciesKey] = 1;
+
+        const speciesData: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
+          id: speciesId,
+        });
+
+        if (speciesData?.family !== family) {
+          throwValidationError('The species does not belong to the specified family.');
+        }
+      }
+    }
+
+    const permit: PermitSpecies = await ctx.call(id ? 'permits.update' : 'permits.create', {
+      ...ctx.params,
+    });
+
+    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+
+    return ctx.call('permits.resolve', { id: permit.id });
+  }
+
   @Action({
     rest: <RestSchema>{
       method: 'GET',
@@ -372,8 +433,8 @@ export default class PermitsService extends moleculer.Service {
       return throwBadRequestError('Permit already exists');
     }
     if (!isAdmin(ctx)) {
-      const profile = ctx.meta.profile;
-      const userId = ctx.meta.user.id;
+      const profile = ctx?.meta?.profile;
+      const userId = ctx?.meta?.user?.id;
       ctx.params.tenant = profile || null;
       ctx.params.user = !profile ? userId : null;
     }
@@ -495,6 +556,34 @@ export default class PermitsService extends moleculer.Service {
       page,
       pageSize,
     });
+  }
+
+  @Method
+  async saveOrUpdateSpeciesForPermit(permitId: number, permitSpeciesList: PermitSpecies[]) {
+    const speciesIdsToSave: number[] = [];
+
+    for (const species of permitSpeciesList) {
+      const updatedSpecies: PermitSpecies = await this.broker.call(
+        'permits.species.createOrUpdate',
+        { ...species, permit: permitId },
+      );
+
+      speciesIdsToSave.push(updatedSpecies.id);
+    }
+
+    const existingSpecies: PermitSpecies[] = await this.broker.call('permits.species.find', {
+      query: { permit: permitId },
+    });
+
+    const speciesIdsToDelete: number[] = existingSpecies
+      .map((species) => species.id)
+      .filter((speciesId) => !speciesIdsToSave.includes(speciesId));
+
+    await Promise.all(
+      speciesIdsToDelete.map(
+        async (speciesId) => await this.broker.call('permits.species.remove', { id: speciesId }),
+      ),
+    );
   }
 
   @Method
