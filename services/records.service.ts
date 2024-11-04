@@ -279,7 +279,7 @@ export default class RecordsService extends moleculer.Service {
       gender: {
         type: 'string',
         enum: [Gender.MALE, Gender.FEMALE],
-        required: false,
+        optional: true,
       },
       date: 'string|optional',
       numberOfAnimals: 'number|convert|optional',
