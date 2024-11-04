@@ -13,6 +13,7 @@ import {
   COMMON_SCOPES,
   CommonFields,
   CommonPopulates,
+  Gender,
   MultipartMeta,
   Table,
 } from '../types';
@@ -38,6 +39,7 @@ export enum RecordType {
   OBTAINMENT_OF_FOSTERED_ANIMAL = 'OBTAINMENT_OF_FOSTERED_ANIMAL',
   RELEASE = 'RELEASE',
   TRANSFER = 'TRANSFER',
+  GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
 }
 
 export enum DeathReason {
@@ -172,7 +174,15 @@ export type Record<
           action: 'speciesClassifiers.resolve',
         },
       },
-      type: 'string|required',
+      type: {
+        type: 'string',
+        required: true,
+        enum: Object.values(RecordType),
+      },
+      gender: {
+        type: 'string',
+        enum: [Gender.MALE, Gender.FEMALE],
+      },
       date: 'string',
       numberOfAnimals: 'number',
       note: 'string',
@@ -262,7 +272,15 @@ export default class RecordsService extends moleculer.Service {
       animal: 'number|convert|optional',
       species: 'number|convert|optional',
       fosteredAnimal: 'number|convert|optional',
-      type: 'string',
+      type: {
+        type: 'string',
+        enum: Object.values(RecordType),
+      },
+      gender: {
+        type: 'string',
+        enum: [Gender.MALE, Gender.FEMALE],
+        required: false,
+      },
       date: 'string|optional',
       numberOfAnimals: 'number|convert|optional',
       note: 'string|optional',
