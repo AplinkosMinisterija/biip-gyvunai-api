@@ -294,7 +294,7 @@ export default class RecordsService extends moleculer.Service {
   async newRecord(ctx: Context<any>) {
     const params = ctx.params;
     if (params?.type === RecordType.GENDER_CONFIRMATION) {
-      await ctx.call('animals.update', { id: params?.id, gender: params.gender });
+      await ctx.call('animals.update', { id: params?.animal, gender: params.gender });
     }
 
     return ctx.call('records.create', params);
