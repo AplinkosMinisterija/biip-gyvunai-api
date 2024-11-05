@@ -155,6 +155,7 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       fencedArea: 'number',
       protectedTerritory: 'boolean',
       note: 'string',
+      info: 'string',
       tenant: {
         type: 'number',
         columnType: 'integer',
