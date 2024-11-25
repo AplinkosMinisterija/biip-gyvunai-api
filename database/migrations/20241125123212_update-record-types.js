@@ -6,7 +6,7 @@ exports.up = function (knex) {
             ADD CONSTRAINT "records_type_check" 
             CHECK ("type" IN ('ACQUIREMENT', 'BIRTH', 'DEATH', 'VACCINATION', 'SALE', 'TREATMENT', 'MARKING', 'PICK_UP_FROM_NATURE', 'OBTAINMENT_OF_FOSTERED_ANIMAL', 'RELEASE', 'TRANSFER','GENDER_CONFIRMATION','CERTIFICATE_NO'))`,
     )
-    .alterTable('speciesClassifiers', (table) => {
+    .alterTable('records', (table) => {
       table.string('certificateNo');
     });
 };
@@ -18,7 +18,7 @@ exports.down = function (knex) {
             ADD CONSTRAINT "records_type_check" 
             CHECK ("type" IN ('ACQUIREMENT', 'BIRTH', 'DEATH', 'VACCINATION', 'SALE', 'TREATMENT', 'MARKING', 'PICK_UP_FROM_NATURE', 'OBTAINMENT_OF_FOSTERED_ANIMAL', 'RELEASE', 'TRANSFER','GENDER_CONFIRMATION'))`,
     )
-    .alterTable('speciesClassifiers', (table) => {
+    .alterTable('records', (table) => {
       table.dropColumn('certificateNo');
     });
 };
