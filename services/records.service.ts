@@ -40,6 +40,7 @@ export enum RecordType {
   RELEASE = 'RELEASE',
   TRANSFER = 'TRANSFER',
   GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
+  CERTIFICATE_NO = 'CERTIFICATE_NO',
 }
 
 export enum DeathReason {
@@ -73,6 +74,7 @@ interface Fields extends CommonFields {
   speciesClassifier: SpeciesClassifier['id'];
   type: RecordType;
   date: string;
+  certificateNo: string;
   numberOfAnimals: number;
   note: string;
   deathReason: DeathReason;
@@ -184,6 +186,7 @@ export type Record<
         enum: [Gender.MALE, Gender.FEMALE],
       },
       date: 'string',
+      certificateNo: 'string',
       numberOfAnimals: 'number',
       note: 'string',
       deathReason: 'string',
