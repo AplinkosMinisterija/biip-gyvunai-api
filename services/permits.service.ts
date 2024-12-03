@@ -69,9 +69,9 @@ interface Fields extends CommonFields {
     name: string;
     size: number;
   };
-  aviarySizeIndoor?: number;
-  aviarySizeOutdoor?: number;
-  aviaryHeight?: number;
+  aviarySizeIndoor?: string;
+  aviarySizeOutdoor?: string;
+  aviaryHeight?: string;
 }
 
 interface Populates extends CommonPopulates {
@@ -199,9 +199,9 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           types: ['Point'],
         },
       },
-      aviarySizeIndoor: 'number',
-      aviarySizeOutdoor: 'number',
-      aviaryHeight: 'number',
+      aviarySizeIndoor: 'string',
+      aviarySizeOutdoor: 'string',
+      aviaryHeight: 'string',
       ...COMMON_FIELDS,
     },
     scopes: {
