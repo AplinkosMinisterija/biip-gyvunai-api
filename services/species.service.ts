@@ -15,6 +15,7 @@ import {
   CommonActionParams,
   CommonFields,
   CommonPopulates,
+  DeepQuery,
   EntityChangedParams,
   GroupByType,
   RestrictionType,
@@ -162,6 +163,22 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
           params: {
             scope: false,
           },
+        },
+      },
+      records: {
+        virtual: true,
+        deepQuery({ getService, q, serviceQuery, serviceFields, withQuery, deeper }: DeepQuery) {
+          const subService = getService('records');
+
+          const subQuery = serviceQuery(subService);
+          subQuery.select(serviceFields(subService));
+          withQuery(subQuery, 'id', 'species');
+          // `created_at` is in default sort
+          q.distinctOn(['created_at', 'id']).select('*');
+          q.orderBy('id', 'asc');
+
+          // Continue recursion
+          deeper(subService);
         },
       },
       amount: 'number',

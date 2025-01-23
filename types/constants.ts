@@ -153,3 +153,25 @@ export const GroupByType = {
   MUNICIPALITY: 'MUNICIPALITY',
   MUNICIPALITY_AND_SPECIES_CLASSIFIER: 'MUNICIPALITY_AND_SPECIES_CLASSIFIER',
 };
+
+export type DeepService = {
+  _joinField: any;
+  _getPrimaryKeyColumnName: any;
+  _getSelectFields: any;
+  _getServiceQuery: (knex: any) => any;
+};
+
+export type DeepQuery = {
+  knex: any;
+  q: any;
+  tableName: string;
+  subTableName: string;
+  fields: string[];
+  field: string;
+  depth: number;
+  deeper: any;
+  withQuery: any;
+  getService: (serviceOrName: string | DeepService) => DeepService;
+  serviceFields: (serviceOrName: string | DeepService) => Record<string, string>;
+  serviceQuery: (serviceOrName: string | DeepService) => any;
+};
