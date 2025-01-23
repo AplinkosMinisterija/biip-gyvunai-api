@@ -173,7 +173,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
           const subQuery = serviceQuery(subService);
           subQuery.select(serviceFields(subService));
           withQuery(subQuery, 'id', 'species');
-          // `created_at` is in default sort
+          // `created_at` is in default sort - so must appear in distinctOn
           q.distinctOn(['created_at', 'id']).select('*');
           q.orderBy('id', 'asc');
 
