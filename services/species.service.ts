@@ -177,29 +177,37 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
           // Continue recursion
           deeper(subService);
 
-          // To make distinct after left join - clone exsiting, clear everything, and wrap it, group it, distinct it
-          const clone = q.clone();
-          [
-            'select',
-            'columns',
-            'with',
-            'select',
-            'columns',
-            'where',
-            'union',
-            'join',
-            'group',
-            'order',
-            'having',
-            'limit',
-            'offset',
-            'counter',
-            'counters',
-          ].forEach((key) => {
-            q.clear(key);
-          });
+          const isCountQuery =
+            q._statements.find((stmt: any) => stmt.grouping === 'columns')?.method === 'count';
 
-          q.distinctOn('id').from(clone.as('subQuery')).orderBy('id', 'asc');
+          if (isCountQuery) {
+            q.clear('select');
+            q.countDistinct('id');
+          } else {
+            // To make distinct after left join - clone exsiting, clear everything, and wrap it, group it, distinct it
+            const clone = q.clone();
+            [
+              'select',
+              'columns',
+              'with',
+              'select',
+              'columns',
+              'where',
+              'union',
+              'join',
+              'group',
+              'order',
+              'having',
+              'limit',
+              'offset',
+              'counter',
+              'counters',
+            ].forEach((key) => {
+              q.clear(key);
+            });
+
+            q.distinctOn('id').from(clone.as('subQuery')).orderBy('id', 'asc');
+          }
         },
       },
       amount: 'number',
