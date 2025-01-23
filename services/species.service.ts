@@ -173,12 +173,34 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
           const subQuery = serviceQuery(subService);
           subQuery.select(serviceFields(subService));
           withQuery(subQuery, 'id', 'species');
-          // `created_at` is in default sort - so must appear in distinctOn
-          q.distinctOn(['created_at', 'id']).select('*');
-          q.orderBy('id', 'asc');
 
           // Continue recursion
           deeper(subService);
+
+          // To make distinct - clone exsiting, clear everything, and wrap it
+
+          const clone = q.clone();
+          [
+            'select',
+            'columns',
+            'with',
+            'select',
+            'columns',
+            'where',
+            'union',
+            'join',
+            'group',
+            'order',
+            'having',
+            'limit',
+            'offset',
+            'counter',
+            'counters',
+          ].forEach((key) => {
+            q.clear(key);
+          });
+
+          q.distinctOn('id').from(clone.as('subQuery')).orderBy('id', 'asc');
         },
       },
       amount: 'number',
