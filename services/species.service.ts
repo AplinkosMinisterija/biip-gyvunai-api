@@ -168,8 +168,8 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
       records: {
         virtual: true,
         deepQuery({ getService, q, serviceQuery, serviceFields, withQuery, deeper }: DeepQuery) {
+          // LEFT JOIN records ON species.id = records.species
           const subService = getService('records');
-
           const subQuery = serviceQuery(subService);
           subQuery.select(serviceFields(subService));
           withQuery(subQuery, 'id', 'species');
@@ -177,8 +177,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
           // Continue recursion
           deeper(subService);
 
-          // To make distinct - clone exsiting, clear everything, and wrap it
-
+          // To make distinct after left join - clone exsiting, clear everything, and wrap it, group it, distinct it
           const clone = q.clone();
           [
             'select',
