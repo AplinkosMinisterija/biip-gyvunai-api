@@ -236,7 +236,7 @@ export default class PermitsService extends moleculer.Service {
     rest: 'GET /deleted',
   })
   listDeleted(ctx: Context<{}>) {
-    return ctx.call('places.list', {
+    return ctx.call('permits.list', {
       ...ctx.params,
       scope: COMMON_DELETED_SCOPES,
     });
