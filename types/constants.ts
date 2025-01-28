@@ -107,6 +107,9 @@ export const COMMON_SCOPES = {
   notDeleted: {
     deletedAt: { $exists: false },
   },
+  deleted: {
+    deletedAt: { $exists: true },
+  },
 };
 
 export const COMMON_PAGINATION_PARAMS = {
@@ -136,6 +139,7 @@ export const COMMON_ACTION_PARAMS = {
 };
 
 export const COMMON_DEFAULT_SCOPES = ['notDeleted'];
+export const COMMON_DELETED_SCOPES = ['-notDeleted', 'deleted'];
 
 export function throwNoRightsError(message?: string): Errors.MoleculerError {
   throw new Moleculer.Errors.MoleculerClientError(message || `No rights.`, 401, 'NO_RIGHTS');
