@@ -11,6 +11,7 @@ import UploadMixin from '../mixins/upload.mixin';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
+  COMMON_DELETED_SCOPES,
   COMMON_FIELDS,
   COMMON_PAGINATION_PARAMS,
   COMMON_SCOPES,
@@ -231,6 +232,16 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  @Action({
+    rest: 'GET /deleted',
+  })
+  listDeleted(ctx: Context<{}>) {
+    return ctx.call('permits.list', {
+      ...ctx.params,
+      scope: COMMON_DELETED_SCOPES,
+    });
+  }
+
   @Action({
     rest: ['POST /', 'PATCH /:id'],
   })
