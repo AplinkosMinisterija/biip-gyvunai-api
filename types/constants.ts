@@ -174,4 +174,5 @@ export type DeepQuery = {
   getService: (serviceOrName: string | DeepService) => DeepService;
   serviceFields: (serviceOrName: string | DeepService) => Record<string, string>;
   serviceQuery: (serviceOrName: string | DeepService) => any;
+  leftJoinService: (serviceOrName: string | DeepService, column1: string, column2: string) => any;
 };
