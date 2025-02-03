@@ -170,7 +170,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
         deepQuery: {
           service: 'records',
           handler({ leftJoinService }: DeepQuery) {
-            leftJoinService('records', 'id', 'species');
+            leftJoinService('records', 'id', 'speciesId');
           },
         },
       },
