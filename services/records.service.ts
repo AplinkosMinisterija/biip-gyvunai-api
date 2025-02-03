@@ -240,7 +240,6 @@ export type Record<
             scope: false,
           },
         },
-        deepQuery: 'users',
       },
       ...COMMON_FIELDS,
     },
