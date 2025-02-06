@@ -55,6 +55,7 @@ interface Fields extends CommonFields {
   note: string;
   info: string;
   cadastralIds: string[];
+  buildingIds: string[];
   specialConditions: string;
   tenant: number;
   user: number;
@@ -148,6 +149,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       address: 'string',
       municipality: 'object',
       cadastralIds: {
+        type: 'array',
+        items: 'string',
+      },
+      buildingIds: {
         type: 'array',
         items: 'string',
       },
