@@ -139,8 +139,6 @@ export default class MinioService extends Moleculer.Service {
       size,
       filename,
       path: `${bucketName}/${objectFileName}`,
-      privateUrl: this.getObjectUrl(objectFileName, true, bucketName),
-      publicUrl: this.getObjectUrl(objectFileName, false, bucketName),
     };
 
     if (presign) {
@@ -291,8 +289,9 @@ export default class MinioService extends Moleculer.Service {
                 },
                 Action: ['s3:GetObject'],
                 Resource: [
-                  `arn:aws:s3:::${BUCKET_NAME()}/uploads/species/*`,
-                  `arn:aws:s3:::${BUCKET_NAME()}/uploads/forms/*`,
+                  `arn:aws:s3:::${BUCKET_NAME()}/uploads/records/*`,
+                  `arn:aws:s3:::${BUCKET_NAME()}/uploads/permits/*`,
+                  `arn:aws:s3:::${BUCKET_NAME()}/uploads/fosteredAnimals/*`,
                 ],
               },
             ],
