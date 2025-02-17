@@ -7,7 +7,6 @@ import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import UploadMixin from '../mixins/upload.mixin';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -116,7 +115,6 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       srid: 3346,
     }),
     ProfileMixin,
-    UploadMixin,
   ],
   settings: {
     fields: {
@@ -427,6 +425,25 @@ export default class PermitsService extends moleculer.Service {
     }
 
     throwValidationError('Invalid permit');
+  }
+
+  @Action({
+    rest: <RestSchema>{
+      method: 'POST',
+      path: '/upload',
+      type: 'multipart',
+      busboyConfig: {
+        limits: {
+          files: 1,
+        },
+      },
+    },
+  })
+  async upload(ctx: Context<{}>) {
+    return ctx.call('minio.uploadFile', {
+      payload: ctx.params,
+      folder: 'uploads/permits',
+    });
   }
 
   @Method
