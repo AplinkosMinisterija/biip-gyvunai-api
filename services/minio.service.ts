@@ -108,13 +108,6 @@ export default class MinioService extends Moleculer.Service {
     const objectFileName = `${folder}/${name}.${extension}`;
     const bucketName = BUCKET_NAME();
 
-
-
-
-
-
-    
-
     try {
       await ctx.call('minio.putObject', payload, {
         meta: {
