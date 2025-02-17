@@ -39,6 +39,7 @@ export enum RecordType {
   TRANSFER = 'TRANSFER',
   GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
   CERTIFICATE_NO = 'CERTIFICATE_NO',
+  OTHER = 'OTHER',
 }
 
 export enum DeathReason {
