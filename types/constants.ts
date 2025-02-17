@@ -144,7 +144,9 @@ export const COMMON_DELETED_SCOPES = ['-notDeleted', 'deleted'];
 export function throwNoRightsError(message?: string): Errors.MoleculerError {
   throw new Moleculer.Errors.MoleculerClientError(message || `No rights.`, 401, 'NO_RIGHTS');
 }
-
+export function throwNotFoundError(message?: string, data?: any): Errors.MoleculerError {
+  throw new Moleculer.Errors.MoleculerClientError(message || `Not found.`, 404, 'NOT_FOUND', data);
+}
 export function throwBadRequestError(message?: string): Errors.MoleculerError {
   throw new Moleculer.Errors.MoleculerClientError(message || `bad request.`, 400, 'BAD_REQUEST');
 }
