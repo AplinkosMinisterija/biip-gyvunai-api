@@ -410,7 +410,7 @@ export default class RecordsService extends moleculer.Service {
   async upload(ctx: Context<{}>) {
     return ctx.call('minio.uploadFile', {
       payload: ctx.params,
-      folder: 'uploads/records',
+      folder: 'records',
     });
   }
 
