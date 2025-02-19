@@ -6,7 +6,6 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import UploadMixin from '../mixins/upload.mixin';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -14,7 +13,6 @@ import {
   CommonFields,
   CommonPopulates,
   Gender,
-  MultipartMeta,
   Table,
 } from '../types';
 import { Animal } from './animals.service';
@@ -121,7 +119,7 @@ export type Record<
 
 @Service({
   name: 'records',
-  mixins: [DbConnection(), ProfileMixin, UploadMixin],
+  mixins: [DbConnection(), ProfileMixin],
   settings: {
     fields: {
       id: {
@@ -399,20 +397,21 @@ export default class RecordsService extends moleculer.Service {
   }
   @Action({
     rest: <RestSchema>{
-      method: 'GET',
-      path: '/:id/file',
-      params: {
-        id: 'number|convert',
+      method: 'POST',
+      path: '/upload',
+      type: 'multipart',
+      busboyConfig: {
+        limits: {
+          files: 1,
+        },
       },
     },
   })
-  async getPermitFile(ctx: Context<any, UserAuthMeta & MultipartMeta>) {
-    const record: Record = await ctx.call('records.get', { id: ctx.params.id });
-    if (!record) {
-      throw new moleculer.Errors.MoleculerClientError('Invalid record', 422, 'INVALID_RECORD');
-    }
-    ctx.params.filename = record.file?.name;
-    return this.getPresignedUrl(ctx);
+  async upload(ctx: Context<{}>) {
+    return ctx.call('minio.uploadFile', {
+      payload: ctx.params,
+      folder: 'records',
+    });
   }
 
   @Method

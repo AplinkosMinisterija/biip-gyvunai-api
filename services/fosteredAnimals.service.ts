@@ -6,7 +6,6 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import Moleculer from 'moleculer';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import UploadMixin from '../mixins/upload.mixin';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -88,7 +87,7 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
 
 @Service({
   name: 'fosteredAnimals',
-  mixins: [DbConnection(), ProfileMixin, UploadMixin],
+  mixins: [DbConnection(), ProfileMixin],
   settings: {
     fields: {
       id: {
@@ -267,6 +266,26 @@ export default class FosteredAnimalsService extends moleculer.Service {
   async publicFosteredAnimalsByMunicipalityAll(ctx: Context<FosteredAnimalsActionParams>) {
     return await this.getPublicFosteredAnimalsByMunicipality(ctx, true);
   }
+
+  @Action({
+    rest: <RestSchema>{
+      method: 'POST',
+      path: '/upload',
+      type: 'multipart',
+      busboyConfig: {
+        limits: {
+          files: 1,
+        },
+      },
+    },
+  })
+  async upload(ctx: Context<{}>) {
+    return ctx.call('minio.uploadFile', {
+      payload: ctx.params,
+      folder: 'fosteredAnimals',
+    });
+  }
+
 
   @Action({
     rest: 'POST /',
