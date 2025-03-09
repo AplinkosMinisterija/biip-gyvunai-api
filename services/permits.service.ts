@@ -19,7 +19,9 @@ import {
   CommonPopulates,
   RestrictionType,
   Table,
+  fieldValueForDeletedScope,
   throwBadRequestError,
+  throwNoRightsError,
   throwValidationError,
 } from '../types';
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
@@ -36,11 +38,27 @@ enum PermitTypes {
   AVIARY = 'AVIARY',
 }
 
+enum DeleteReasons {
+  NON_COMPLIANCE = 'NON_COMPLIANCE',
+  REQUESTED_CANCELLATION = 'REQUESTED_CANCELLATION',
+  ENTITY_DISSOLVED = 'ENTITY_DISSOLVED',
+  HOLDER_DECEASED = 'HOLDER_DECEASED',
+  DISEASE_OUTBREAK = 'DISEASE_OUTBREAK',
+  NO_ANIMALS_FOR_YEAR = 'NO_ANIMALS_FOR_YEAR',
+  INSUFFICIENT_SPACE = 'INSUFFICIENT_SPACE',
+  NO_ANIMALS_INTRODUCED = 'NO_ANIMALS_INTRODUCED',
+  FRAUDULENT_INFO = 'FRAUDULENT_INFO',
+  EXPIRED = 'EXPIRED',
+  OTHER = 'OTHER',
+}
+
 interface Fields extends CommonFields {
   id: number;
   permitNumber: string;
   issueDate: string;
   issuer: IssuerClassifier['id'];
+  deleteReason: DeleteReasons;
+  deleteOtherReason: string;
   type: PermitTypes;
   address: string;
   municipality: {
@@ -206,6 +224,15 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       aviarySizeIndoor: 'string',
       aviarySizeOutdoor: 'string',
       aviaryHeight: 'string',
+      deleteReason: {
+        type: 'string',
+        get: fieldValueForDeletedScope,
+        enum: Object.values(DeleteReasons),
+      },
+      deleteOtherReason: {
+        type: 'string',
+        get: fieldValueForDeletedScope,
+      },
       ...COMMON_FIELDS,
     },
     scopes: {
@@ -216,6 +243,9 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
   actions: {
     create: {
+      rest: null,
+    },
+    remove: {
       rest: null,
     },
     update: {
@@ -235,6 +265,49 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  @Action({
+    rest: 'DELETE /:id',
+    params: {
+      id: {
+        type: 'number',
+        convert: true,
+      },
+      deleteReason: {
+        type: 'string',
+        enum: Object.values(DeleteReasons),
+      },
+      deleteOtherReason: {
+        type: 'string',
+        optional: true,
+      },
+    },
+    types: [RestrictionType.ADMIN],
+  })
+  async removePermit(
+    ctx: Context<
+      { id: number; deleteReason: DeleteReasons; deleteOtherReason?: string },
+      UserAuthMeta
+    >,
+  ) {
+    const { id, deleteReason, deleteOtherReason } = ctx.params;
+    const accesses = ctx?.meta?.authUser?.permissions?.NLG?.accesses ?? [];
+    const canRemovePermit = accesses.includes('*') || accesses.includes('DELETE_PERMIT');
+
+    if (!canRemovePermit) {
+      throwNoRightsError();
+    }
+
+    await ctx.call('permits.update', {
+      id,
+      deleteReason,
+      deleteOtherReason,
+    });
+
+    return await ctx.call('permits.remove', {
+      id,
+    });
+  }
+
   @Action({
     rest: 'GET /deleted',
   })
