@@ -291,7 +291,7 @@ export default class PermitsService extends moleculer.Service {
   ) {
     const { id, deleteReason, deleteOtherReason } = ctx.params;
     const accesses = ctx?.meta?.authUser?.permissions?.NLG?.accesses ?? [];
-    const canRemovePermit = accesses.includes('*') || accesses.includes('DELETE_PERMIT');
+    const canRemovePermit = accesses.includes('*') || accesses.includes('DELETE_PERMITS');
 
     if (!canRemovePermit) {
       throwNoRightsError();
