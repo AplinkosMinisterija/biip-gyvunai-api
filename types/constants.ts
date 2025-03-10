@@ -190,8 +190,6 @@ export function fieldValueForDeletedScope({ ctx, value }: any) {
     scope = scope.split(',');
   }
 
-  const scopesExists = scope.includes('deleted');
-
-  if (!scopesExists) return;
+  if (!scope.includes('deleted')) return;
   return value;
 }
