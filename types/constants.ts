@@ -99,6 +99,7 @@ export const COMMON_FIELDS = {
     type: 'date',
     columnType: 'datetime',
     readonly: true,
+    get: fieldValueForDeletedScope,
     onRemove: () => new Date(),
   },
 };
@@ -181,3 +182,14 @@ export type DeepQuery = {
   serviceFields: (serviceOrName: string | DeepService) => Record<string, string>;
   serviceQuery: (serviceOrName: string | DeepService) => any;
 };
+
+export function fieldValueForDeletedScope({ ctx, value }: any) {
+  if (!ctx?.params?.scope) return;
+  let scope = ctx.params.scope;
+  if (!Array.isArray(scope)) {
+    scope = scope.split(',');
+  }
+
+  if (!scope.includes('deleted')) return;
+  return value;
+}
