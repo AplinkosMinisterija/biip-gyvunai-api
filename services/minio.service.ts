@@ -6,10 +6,10 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import MinioMixin from 'moleculer-minio';
 import moment from 'moment';
 import {
+  ALL_FILE_TYPES,
   getExtention,
   getMimetype,
   getPublicFileName,
-  IMAGE_TYPES,
   MultipartMeta,
   RestrictionType,
   throwNotFoundError,
@@ -65,7 +65,7 @@ export default class MinioService extends Moleculer.Service {
         type: 'array',
         items: 'string',
         optional: true,
-        default: IMAGE_TYPES,
+        default: ALL_FILE_TYPES,
       },
       name: {
         type: 'string',
