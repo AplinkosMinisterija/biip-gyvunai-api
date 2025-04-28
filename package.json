@@ -52,7 +52,7 @@
     "typescript": "^5.0.2"
   },
   "dependencies": {
-    "@aplinkosministerija/moleculer-accounts": "^1.4.1",
+    "@aplinkosministerija/moleculer-accounts": "^1.5.0",
     "@moleculer/database": "github:ambrazasp/moleculerjs-database",
     "@sentry/node": "^7.68.0",
     "biip-auth-nodejs": "github:DadPatch/biip-auth-nodejs",
