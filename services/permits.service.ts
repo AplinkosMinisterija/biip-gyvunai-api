@@ -461,14 +461,13 @@ export default class PermitsService extends moleculer.Service {
   @Action({
     rest: <RestSchema>{
       method: 'GET',
-      basePath: '/public/species',
+      basePath: '/public/permitSpecies',
       path: '/',
     },
     auth: RestrictionType.PUBLIC,
-    params: PERMIT_ACTION_PAGINATION_PARAMS,
   })
-  async test(ctx: Context<CommonActionParams>) {
-    const permits: Permit[] = await ctx.call('permits.find', { populate: 'permitSpecies' });
+  async publicPermitSpecies(ctx: Context<CommonActionParams>) {
+    return ctx.call('public.permitSpecies.list', ctx.params);
   }
 
   @Action({

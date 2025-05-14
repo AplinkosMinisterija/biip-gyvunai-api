@@ -18,7 +18,7 @@ export interface PublicPermitSpeciesStat {
 }
 
 @Service({
-  name: 'publicPermitSpecies',
+  name: 'public.permitSpecies',
 
   mixins: [
     DbConnection({
@@ -40,20 +40,16 @@ export interface PublicPermitSpeciesStat {
     fields: {
       speciesId: {
         type: 'number',
-        columnName: 'species_id',
         primaryKey: true,
       },
       species: {
         type: 'string',
-        columnName: 'species',
       },
-      specieLot: {
+      speciesLot: {
         type: 'string',
-        columnName: 'specie_lot',
       },
       totalPermits: {
         type: 'number',
-        columnName: 'total_permits',
       },
       municipalities: {
         type: 'array',
