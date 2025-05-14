@@ -5,7 +5,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
-import DbConnection from '../mixins/database.mixin';
+import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
   COMMON_ACTION_PARAMS,
@@ -26,6 +26,7 @@ import {
 } from '../types';
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
 import { UserAuthMeta } from './api.service';
+import { FamilyClassifier } from './familyClassifiers.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
 import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
@@ -78,9 +79,8 @@ interface Fields extends CommonFields {
   user: number;
   permitSpecies: {
     id: number;
-    name: string;
-    nameLatin: string;
-    type: 'species' | 'other';
+    family: FamilyClassifier;
+    species: Species;
   }[];
   species: Species[];
   file: {
@@ -303,9 +303,13 @@ export default class PermitsService extends moleculer.Service {
       deleteOtherReason,
     });
 
-    return await ctx.call('permits.remove', {
+    const deletedPermitId = await ctx.call('permits.remove', {
       id,
     });
+
+    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
+
+    return deletedPermitId;
   }
 
   @Action({
@@ -358,7 +362,7 @@ export default class PermitsService extends moleculer.Service {
       ...ctx.params,
     });
 
-    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+    await this.saveOrUpdateSpeciesForPermit(ctx, permit.id, permitSpecies);
 
     return ctx.call('permits.resolve', { id: permit.id });
   }
@@ -452,6 +456,19 @@ export default class PermitsService extends moleculer.Service {
     general.speciesClassifiersCount = Object.keys(uniqueSpeciesClassifiers).length;
 
     return general;
+  }
+
+  @Action({
+    rest: <RestSchema>{
+      method: 'GET',
+      basePath: '/public/species',
+      path: '/',
+    },
+    auth: RestrictionType.PUBLIC,
+    params: PERMIT_ACTION_PAGINATION_PARAMS,
+  })
+  async test(ctx: Context<CommonActionParams>) {
+    const permits: Permit[] = await ctx.call('permits.find', { populate: 'permitSpecies' });
   }
 
   @Action({
@@ -666,7 +683,11 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  async saveOrUpdateSpeciesForPermit(permitId: number, permitSpeciesList: PermitSpecies[]) {
+  async saveOrUpdateSpeciesForPermit(
+    ctx: Context,
+    permitId: number,
+    permitSpeciesList: PermitSpecies[],
+  ) {
     const speciesIdsToSave: number[] = [];
 
     for (const species of permitSpeciesList) {
@@ -691,6 +712,8 @@ export default class PermitsService extends moleculer.Service {
         async (speciesId) => await this.broker.call('permits.species.remove', { id: speciesId }),
       ),
     );
+
+    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
   }
 
   @Method

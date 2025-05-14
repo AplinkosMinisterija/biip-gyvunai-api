@@ -1,8 +1,13 @@
 'use strict';
 
 import { DatabaseMixin } from '@aplinkosministerija/moleculer-accounts';
+import { Context } from 'moleculer';
 import filtersMixin from 'moleculer-knex-filters';
 import config from '../knexfile';
+
+export const MaterializedView = {
+  PUBLIC_PERMIT_SPECIES: 'publicPermitSpecies',
+};
 
 export default function (opts: any = {}) {
   const schema = {
@@ -11,6 +16,17 @@ export default function (opts: any = {}) {
     actions: {
       findOne(ctx: any) {
         return this.findEntity(ctx);
+      },
+    },
+
+    methods: {
+      async refreshMaterializedView(ctx: Context, name: string) {
+        const adapter = await this.getAdapter(ctx);
+
+        await adapter.client.schema.refreshMaterializedView(name);
+        return {
+          success: true,
+        };
       },
     },
   };
