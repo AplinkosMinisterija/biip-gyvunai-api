@@ -1,5 +1,6 @@
 'use strict';
 
+import { RestrictionType } from '@aplinkosministerija/moleculer-accounts';
 import moleculer from 'moleculer';
 import { Service } from 'moleculer-decorators';
 import DbConnection from '../mixins/database.mixin';
@@ -27,7 +28,6 @@ export interface PublicPermitSpeciesStat {
         create: false,
         update: false,
         remove: false,
-        get: false,
         createMany: false,
         removeAllEntities: false,
       },
@@ -63,6 +63,17 @@ export interface PublicPermitSpeciesStat {
         columnType: 'jsonb',
         get: ({ entity }: any) => entity.municipalities || [],
       },
+    },
+  },
+  actions: {
+    list: {
+      auth: RestrictionType.PUBLIC,
+    },
+    find: {
+      auth: RestrictionType.PUBLIC,
+    },
+    get: {
+      auth: RestrictionType.PUBLIC,
     },
   },
 })
