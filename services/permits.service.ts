@@ -5,7 +5,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
-import DbConnection, { MaterializedView } from '../mixins/database.mixin';
+import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
   COMMON_ACTION_PARAMS,
@@ -306,8 +306,6 @@ export default class PermitsService extends moleculer.Service {
     const deletedPermitId = await ctx.call('permits.remove', {
       id,
     });
-
-    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
 
     return deletedPermitId;
   }
@@ -699,8 +697,6 @@ export default class PermitsService extends moleculer.Service {
         async (speciesId) => await this.broker.call('permits.species.remove', { id: speciesId }),
       ),
     );
-
-    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
   }
 
   @Method
