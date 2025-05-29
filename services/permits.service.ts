@@ -26,6 +26,7 @@ import {
 } from '../types';
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
 import { UserAuthMeta } from './api.service';
+import { FamilyClassifier } from './familyClassifiers.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
 import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
@@ -78,9 +79,8 @@ interface Fields extends CommonFields {
   user: number;
   permitSpecies: {
     id: number;
-    name: string;
-    nameLatin: string;
-    type: 'species' | 'other';
+    family: FamilyClassifier;
+    species: Species;
   }[];
   species: Species[];
   file: {
@@ -303,7 +303,7 @@ export default class PermitsService extends moleculer.Service {
       deleteOtherReason,
     });
 
-    return await ctx.call('permits.remove', {
+    return ctx.call('permits.remove', {
       id,
     });
   }
