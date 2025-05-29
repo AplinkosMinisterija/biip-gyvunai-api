@@ -303,11 +303,9 @@ export default class PermitsService extends moleculer.Service {
       deleteOtherReason,
     });
 
-    const deletedPermitId = await ctx.call('permits.remove', {
+    return ctx.call('permits.remove', {
       id,
     });
-
-    return deletedPermitId;
   }
 
   @Action({
@@ -360,7 +358,7 @@ export default class PermitsService extends moleculer.Service {
       ...ctx.params,
     });
 
-    await this.saveOrUpdateSpeciesForPermit(ctx, permit.id, permitSpecies);
+    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
 
     return ctx.call('permits.resolve', { id: permit.id });
   }
@@ -668,11 +666,7 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  async saveOrUpdateSpeciesForPermit(
-    ctx: Context,
-    permitId: number,
-    permitSpeciesList: PermitSpecies[],
-  ) {
+  async saveOrUpdateSpeciesForPermit(permitId: number, permitSpeciesList: PermitSpecies[]) {
     const speciesIdsToSave: number[] = [];
 
     for (const species of permitSpeciesList) {
