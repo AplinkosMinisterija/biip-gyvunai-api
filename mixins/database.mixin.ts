@@ -7,6 +7,7 @@ import config from '../knexfile';
 
 export const MaterializedView = {
   PUBLIC_PERMIT_SPECIES: 'publicPermitSpecies',
+  PUBLIC_PERMITS_BY_CADASTRAL_IDS: 'publicPermitsByCadastralIds',
 };
 
 export default function (opts: any = {}) {

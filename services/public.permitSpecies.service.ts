@@ -96,6 +96,7 @@ export default class PublicPermitSpeciesStatsService extends moleculer.Service<P
 
     if (['create', 'update', 'replace', 'remove'].includes(type)) {
       await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
+      await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMITS_BY_CADASTRAL_IDS);
     }
   }
 }
