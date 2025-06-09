@@ -18,13 +18,11 @@ exports.up = function (knex) {
               SELECT json_agg(
                 DISTINCT jsonb_build_object(
                   'id', ps.id,
-                  'speciesClassifier', to_jsonb(sc),
-                  'familyClassifiers', to_jsonb(fc)
+                  'speciesClassifier', to_jsonb(sc)
                 )
               )
               FROM permit_species ps
               LEFT JOIN species_classifiers sc ON ps.species_classifier_id = sc.id
-              LEFT JOIN family_classifiers fc ON ps.family_classifier_id = fc.id
               WHERE ps.permit_id = p.id
             )
           )
