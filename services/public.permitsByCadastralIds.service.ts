@@ -47,8 +47,8 @@ export interface PublicPermitByCadastral {
             issuedToUser: {
               type: 'object',
               props: {
-                name: 'string',
-                lastname: 'string',
+                firstName: 'string',
+                lastName: 'string',
               },
             },
             issuedToTenant: {
