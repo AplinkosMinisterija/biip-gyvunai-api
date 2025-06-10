@@ -1,30 +1,29 @@
 exports.up = function (knex) {
   return knex.raw(`
     CREATE MATERIALIZED VIEW public_permits_by_cadastral_ids AS
-
     WITH permit_species_data AS (
       SELECT
-        psc.permit_id,
+        ps.permit_id,
         json_agg(
-          DISTINCT jsonb_build_object(
+        DISTINCT jsonb_build_object(
             'id', sc.id,
             'speciesClassifier', jsonb_build_object(
               'id', sc.id,
-               'name',sc.name,
-               'nameLatin',sc.name_latin,
-               'type',sc.type
+              'name', sc.name,
+              'nameLatin', sc.name_latin,
+              'type', sc.type
             )
           )
         ) AS species_classifiers
-      FROM permit_species_classifiers psc
-      JOIN species_classifiers sc ON psc.species_classifier_id = sc.id
-      GROUP BY psc.permit_id
+      FROM permit_species ps
+      JOIN species_classifiers sc ON ps.species_classifier_id = sc.id
+      GROUP BY ps.permit_id
     )
-
+    
     SELECT
       plot ->> 'cadastral_number' AS cadastral_number,
       json_agg(
-        DISTINCT json_build_object(
+       json_build_object(
           'permitNumber', p.permit_number,
           'issuedToUser', json_build_object(
             'firstName', u.first_name,
@@ -45,6 +44,7 @@ exports.up = function (knex) {
       JOIN LATERAL jsonb_array_elements(p.cadastral_ids) AS plot ON true
     GROUP BY
       plot ->> 'cadastral_number';
+    
   `);
 };
 
