@@ -18,7 +18,7 @@ export interface PublicPermitByCadastral {
 
   mixins: [
     DbConnection({
-      collection: 'public_permits_by_cadastral_ids',
+      collection: 'publicPermitsByCadastralIds',
       createActions: {
         create: false,
         update: false,
@@ -28,8 +28,6 @@ export interface PublicPermitByCadastral {
       },
     }),
   ],
-
-  createActions: false,
 
   settings: {
     fields: {
