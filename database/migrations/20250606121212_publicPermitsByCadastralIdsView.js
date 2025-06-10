@@ -6,7 +6,6 @@ exports.up = function (knex) {
         ps.permit_id,
         json_agg(
         DISTINCT jsonb_build_object(
-            'id', sc.id,
             'speciesClassifier', jsonb_build_object(
               'id', sc.id,
               'name', sc.name,
