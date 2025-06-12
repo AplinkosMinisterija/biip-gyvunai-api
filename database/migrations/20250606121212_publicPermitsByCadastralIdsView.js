@@ -4,8 +4,8 @@ exports.up = function (knex) {
     WITH permit_species_data AS (
       SELECT
         ps.permit_id,
-        json_agg(
-        DISTINCT jsonb_build_object(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
             'speciesClassifier', jsonb_build_object(
               'id', sc.id,
               'name', sc.name,
@@ -18,17 +18,17 @@ exports.up = function (knex) {
       JOIN species_classifiers sc ON ps.species_classifier_id = sc.id
       GROUP BY ps.permit_id
     )
-    
+
     SELECT
       plot ->> 'cadastral_number' AS cadastral_number,
-      json_agg(
-       json_build_object(
+      jsonb_agg(
+        jsonb_build_object(
           'permitNumber', p.permit_number,
-          'issuedToUser', json_build_object(
+          'issuedToUser', jsonb_build_object(
             'firstName', u.first_name,
             'lastName', u.last_name
           ),
-          'issuedToTenant', json_build_object(
+          'issuedToTenant', jsonb_build_object(
             'name', t.name
           ),
           'id', p.id,
@@ -43,7 +43,6 @@ exports.up = function (knex) {
       JOIN LATERAL jsonb_array_elements(p.cadastral_ids) AS plot ON true
     GROUP BY
       plot ->> 'cadastral_number';
-    
   `);
 };
 
