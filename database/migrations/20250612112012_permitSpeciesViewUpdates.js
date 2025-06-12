@@ -1,5 +1,7 @@
 exports.up = function (knex) {
   return knex.raw(`
+      DROP MATERIALIZED VIEW IF EXISTS public_permit_species;
+      
       CREATE MATERIALIZED VIEW public_permit_species AS
       WITH filtered_permits AS (
           SELECT
