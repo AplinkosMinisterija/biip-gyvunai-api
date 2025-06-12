@@ -55,7 +55,7 @@ export interface PublicPermitSpeciesStat {
         type: 'array',
         items: {
           type: 'object',
-          props: {
+          properties: {
             id: 'string',
             name: 'string',
           },
