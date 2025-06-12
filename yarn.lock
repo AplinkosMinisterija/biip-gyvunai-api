@@ -25,10 +25,10 @@
   resolved "https://registry.yarnpkg.com/@aplinkosministerija/eslint-config-biip-api/-/eslint-config-biip-api-1.0.0.tgz#73b5bbe0293613caf9672c0a5d6f3007bed90b2f"
   integrity sha512-pjZUTahsui7NhcDaT/n3n/6R6MGpRJUkFX14rIBLyRpNXqHHWC3ZtKU0IHorrPuceINmZE7mWvemwGAedTu+SA==
 
-"@aplinkosministerija/moleculer-accounts@^1.4.1":
-  version "1.4.1"
-  resolved "https://registry.yarnpkg.com/@aplinkosministerija/moleculer-accounts/-/moleculer-accounts-1.4.1.tgz#af1f780adc38e4fae6eda6a46f72133da072800f"
-  integrity sha512-D8J6WHObdxSlcJ5FBet+0JfdnJwa3hEhgE7KNt1FVn4JwUfF3IaW7KqzR4huQFwHmMhUosCdb7rZHjnnM8a4Wg==
+"@aplinkosministerija/moleculer-accounts@^1.5.0":
+  version "1.5.0"
+  resolved "https://registry.yarnpkg.com/@aplinkosministerija/moleculer-accounts/-/moleculer-accounts-1.5.0.tgz#f1a30ee3a11661e5eb2b9730a7fe41714cb75f22"
+  integrity sha512-TdFxhW10VJ9BEQrZmnBxQZvja07EjbrI5WMf6FRF2UN6TjZyj9cL/cm/StfG5n2RKcYFizVmLQsqpMrZgJcLXg==
   dependencies:
     "@moleculer/database" "github:ambrazasp/moleculerjs-database"
     jsonwebtoken "^9.0.2"
@@ -37,6 +37,7 @@
     moleculer "^0.14.33"
     moleculer-decorators "^1.3.0"
     moleculer-postgis "^0.3.3"
+    mongo-query-to-postgres-jsonb "^0.2.17"
     pg "^8.12.0"
     supercluster "7.1.5"
     typescript "^5.4.5"
@@ -4403,6 +4404,11 @@ moment@^2.29.4:
   version "2.29.4"
   resolved "https://registry.yarnpkg.com/moment/-/moment-2.29.4.tgz#3dbe052889fe7c1b2ed966fcb3a77328964ef108"
   integrity sha512-5LC9SOxjSc2HF6vO2CyuTDNivEdoz2IvyJJGj6X8DJ0eFyfszE0QiEd+iXmBvUP3WHxSjFH/vIsA0EN00cgr8w==
+
+mongo-query-to-postgres-jsonb@^0.2.17:
+  version "0.2.17"
+  resolved "https://registry.yarnpkg.com/mongo-query-to-postgres-jsonb/-/mongo-query-to-postgres-jsonb-0.2.17.tgz#e4b61bd97abd172293444fd1c1d63ae642607358"
+  integrity sha512-LZXG9l9oikhZmnoexCzwlg2fmVKzV2478gt5SMS6nDJKwz5X7dmg7JXzO1RQ5ffuJ026dZIAwREk44NcXB2dDw==
 
 mri@1.1.4:
   version "1.1.4"
