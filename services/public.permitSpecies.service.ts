@@ -2,7 +2,7 @@
 
 import { RestrictionType } from '@aplinkosministerija/moleculer-accounts';
 import moleculer, { Context } from 'moleculer';
-import { Event, Service } from 'moleculer-decorators';
+import { Event, Method, Service } from 'moleculer-decorators';
 import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 
 export interface Municipality {
@@ -55,7 +55,7 @@ export interface PublicPermitSpeciesStat {
         type: 'array',
         items: {
           type: 'object',
-          props: {
+          properties: {
             id: 'string',
             name: 'string',
           },
@@ -83,10 +83,20 @@ export interface PublicPermitSpeciesStat {
 export default class PublicPermitSpeciesStatsService extends moleculer.Service<PublicPermitSpeciesStat> {
   @Event()
   async 'permits.*'(ctx: Context<any>) {
+    await this.handlePermitEvent(ctx);
+  }
+
+  @Event()
+  async 'permits.species.*'(ctx: Context<any>) {
+    await this.handlePermitEvent(ctx);
+  }
+  @Method
+  async handlePermitEvent(ctx: Context<any>) {
     const type = ctx?.params?.type;
 
     if (['create', 'update', 'replace', 'remove'].includes(type)) {
       await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
+      await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMITS_BY_CADASTRAL_IDS);
     }
   }
 }
