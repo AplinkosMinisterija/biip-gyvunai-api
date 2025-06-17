@@ -70,7 +70,7 @@ export default class FishAgesService extends moleculer.Service {
         type: types[ctx.params.species.speciesClassifier.type],
         speciesName: ctx.params.species.speciesClassifier.name,
         latinName: ctx.params.species.speciesClassifier.nameLatin,
-        actionUrl: `${process.env.ADMIN_HOST}/gyvunu-rusys/${ctx.params.species.id}/gyvunu-zurnalas`,
+        actionUrl: `${process.env.ADMIN_HOST}/nlg/gyvunu-zurnalas/${ctx.params.species.id}`,
       },
     }));
     try {
