@@ -699,7 +699,7 @@ export default class PermitsService extends moleculer.Service {
       query: JSON.stringify({
         id: Number(ctx.params.id),
         tenant: ctx.params.profile || null,
-        user: !!ctx.params.profile ? ctx.params.user : null,
+        user: !ctx.params.profile ? ctx.params.user : null,
       }),
     });
     if (!existingPermit) {

@@ -5,13 +5,14 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import { RequestMessage, RestrictionType, throwNoRightsError } from '../types';
 import { User } from './users.service';
+import { Tenant } from './tenants.service';
 
 export interface UserAuthMeta {
   user: User;
   app: any;
   authToken: string;
   authUser: any;
-  profile: any;
+  profile?: Tenant['id'];
 }
 
 export enum AuthUserRole {
