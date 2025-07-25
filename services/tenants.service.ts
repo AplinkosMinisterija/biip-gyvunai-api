@@ -10,7 +10,7 @@ import { UserAuthMeta } from './api.service';
 import { UserType } from './users.service';
 
 export interface Tenant {
-  id: string;
+  id: number;
   name: string;
   email: string;
   phone: string;
