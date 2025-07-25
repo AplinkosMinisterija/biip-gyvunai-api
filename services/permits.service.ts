@@ -695,12 +695,9 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeUpdate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit = await this.findEntity(ctx, {
-      query: JSON.stringify({
-        id: Number(ctx.params.id),
-        tenant: ctx.params.profile || null,
-        user: !ctx.params.profile ? ctx.params.user : null,
-      }),
+    const existingPermit = await this.resolveEntities(ctx, {
+      id: ctx.params.id,
+      throwIfNotExist: true,
     });
     if (!existingPermit) {
       return throwValidationError('Invalid permit');
