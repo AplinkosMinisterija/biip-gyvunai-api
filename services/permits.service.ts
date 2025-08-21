@@ -20,7 +20,6 @@ import {
   EntityChangedParams,
   RestrictionType,
   Table,
-  fieldValueForDeletedScope,
   throwBadRequestError,
   throwNoRightsError,
   throwValidationError,
@@ -226,15 +225,6 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       aviarySizeIndoor: 'string',
       aviarySizeOutdoor: 'string',
       aviaryHeight: 'string',
-      deleteReason: {
-        type: 'string',
-        get: fieldValueForDeletedScope,
-        enum: Object.values(DeleteReasons),
-      },
-      deleteOtherReason: {
-        type: 'string',
-        get: fieldValueForDeletedScope,
-      },
       ...COMMON_FIELDS,
     },
     scopes: {
@@ -299,15 +289,19 @@ export default class PermitsService extends moleculer.Service {
       throwNoRightsError();
     }
 
-    await ctx.call('permits.update', {
+    await ctx.call('permits.remove', {
       id,
-      deleteReason,
-      deleteOtherReason,
     });
 
-    return ctx.call('permits.remove', {
+    await this.createPermitHistory(
       id,
-    });
+      ctx.meta,
+      PermitHistoryTypes.DELETED,
+      deleteReason,
+      deleteOtherReason,
+    );
+
+    return id;
   }
 
   @Action({
@@ -723,11 +717,19 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  createPermitHistory(permit: number | string, meta: any, type: string) {
+  createPermitHistory(
+    permit: number | string,
+    meta: any,
+    type: string,
+    deleteReason?: DeleteReasons,
+    deleteOtherReason?: string,
+  ) {
     return this.broker.call(
       'permits.histories.create',
       {
         permit,
+        deleteReason,
+        deleteOtherReason,
         type,
       },
       { meta },
@@ -746,12 +748,5 @@ export default class PermitsService extends moleculer.Service {
     const { data: permit } = ctx.params;
 
     await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.CREATED);
-  }
-
-  @Event()
-  async 'permits.removed'(ctx: Context<EntityChangedParams<Permit>>) {
-    const { data: permit } = ctx.params;
-
-    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.DELETED);
   }
 }

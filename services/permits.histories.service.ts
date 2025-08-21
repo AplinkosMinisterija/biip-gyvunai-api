@@ -12,6 +12,20 @@ export const PermitHistoryTypes = {
   DELETED: 'DELETED',
 };
 
+enum DeleteReasons {
+  NON_COMPLIANCE = 'NON_COMPLIANCE',
+  REQUESTED_CANCELLATION = 'REQUESTED_CANCELLATION',
+  ENTITY_DISSOLVED = 'ENTITY_DISSOLVED',
+  HOLDER_DECEASED = 'HOLDER_DECEASED',
+  DISEASE_OUTBREAK = 'DISEASE_OUTBREAK',
+  NO_ANIMALS_FOR_YEAR = 'NO_ANIMALS_FOR_YEAR',
+  INSUFFICIENT_SPACE = 'INSUFFICIENT_SPACE',
+  NO_ANIMALS_INTRODUCED = 'NO_ANIMALS_INTRODUCED',
+  FRAUDULENT_INFO = 'FRAUDULENT_INFO',
+  EXPIRED = 'EXPIRED',
+  OTHER = 'OTHER',
+}
+
 @Service({
   name: 'permits.histories',
 
@@ -42,6 +56,11 @@ export const PermitHistoryTypes = {
         immutable: true,
         populate: 'permits.resolve',
       },
+      deleteReason: {
+        type: 'string',
+        enum: Object.values(DeleteReasons),
+      },
+      deleteOtherReason: 'string',
       ...COMMON_FIELDS,
     },
     scopes: {
