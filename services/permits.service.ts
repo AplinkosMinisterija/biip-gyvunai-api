@@ -1,7 +1,7 @@
 'use strict';
 
 import moleculer, { Context, RestSchema } from 'moleculer';
-import { Action, Method, Service } from 'moleculer-decorators';
+import { Action, Event, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
@@ -17,6 +17,7 @@ import {
   CommonActionParams,
   CommonFields,
   CommonPopulates,
+  EntityChangedParams,
   RestrictionType,
   Table,
   fieldValueForDeletedScope,
@@ -28,6 +29,7 @@ import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../
 import { UserAuthMeta } from './api.service';
 import { FamilyClassifier } from './familyClassifiers.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
+import { PermitHistoryTypes } from './permits.histories.service';
 import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
@@ -718,5 +720,38 @@ export default class PermitsService extends moleculer.Service {
       ctx.params.user = !profile ? userId : null;
     }
     return ctx;
+  }
+
+  @Method
+  createPermitHistory(permit: number | string, meta: any, type: string) {
+    return this.broker.call(
+      'permits.histories.create',
+      {
+        permit,
+        type,
+      },
+      { meta },
+    );
+  }
+
+  @Event()
+  async 'permits.updated'(ctx: Context<EntityChangedParams<Permit>>) {
+    const { data: permit } = ctx.params;
+
+    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.UPDATED);
+  }
+
+  @Event()
+  async 'permits.created'(ctx: Context<EntityChangedParams<Permit>>) {
+    const { data: permit } = ctx.params;
+
+    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.CREATED);
+  }
+
+  @Event()
+  async 'permits.removed'(ctx: Context<EntityChangedParams<Permit>>) {
+    const { data: permit } = ctx.params;
+
+    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.DELETED);
   }
 }
