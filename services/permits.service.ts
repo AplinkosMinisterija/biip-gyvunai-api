@@ -258,6 +258,34 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
 })
 export default class PermitsService extends moleculer.Service {
   @Action({
+    rest: 'GET /:id/history',
+    params: {
+      id: {
+        type: 'number',
+        convert: true,
+      },
+    },
+  })
+  async getHistory(
+    ctx: Context<{
+      id: number;
+      type?: string;
+      page?: number;
+      pageSize?: number;
+    }>,
+  ) {
+    return ctx.call(`permits.histories.${ctx.params.type || 'list'}`, {
+      sort: '-createdAt',
+      query: {
+        request: ctx.params.id,
+      },
+      page: ctx.params.page,
+      pageSize: ctx.params.pageSize,
+      populate: 'createdBy',
+    });
+  }
+
+  @Action({
     rest: 'DELETE /:id',
     params: {
       id: {
