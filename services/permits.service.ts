@@ -277,7 +277,7 @@ export default class PermitsService extends moleculer.Service {
     return ctx.call(`permits.histories.${ctx.params.type || 'list'}`, {
       sort: '-createdAt',
       query: {
-        request: ctx.params.id,
+        permit: ctx.params.id,
       },
       page: ctx.params.page,
       pageSize: ctx.params.pageSize,
