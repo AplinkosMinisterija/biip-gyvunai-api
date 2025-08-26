@@ -520,6 +520,22 @@ export default class UsersService extends moleculer.Service {
   @Action({
     params: {
       authUser: 'any',
+    },
+    cache: {
+      keys: ['authUser.id'],
+    },
+  })
+  async resolveByAuthUser(ctx: Context<{ authUser: any }>) {
+    const user: User = await ctx.call('users.findOrCreate', {
+      authUser: ctx.params.authUser,
+    });
+
+    return user;
+  }
+
+  @Action({
+    params: {
+      authUser: 'any',
       authUserGroups: 'array',
     },
   })

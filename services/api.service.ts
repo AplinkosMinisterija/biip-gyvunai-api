@@ -4,8 +4,8 @@ import moleculer, { Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import { RequestMessage, RestrictionType, throwNoRightsError } from '../types';
-import { User } from './users.service';
 import { Tenant } from './tenants.service';
+import { User } from './users.service';
 
 export interface UserAuthMeta {
   user: User;
@@ -137,13 +137,11 @@ export default class ApiService extends moleculer.Service {
       meta: { authToken: token },
     });
 
-    let user: User;
+    const user: User = await ctx.call('users.resolveByAuthUser', {
+      authUser: authUser,
+    });
+
     if (authUser.type === AuthUserRole.USER) {
-      user = await ctx.call('users.findOne', {
-        query: {
-          authUser: authUser.id,
-        },
-      });
       const profile = req.headers['x-profile'] as any;
       if (!!profile) {
         const currentTenantUser = await ctx.call('tenantUsers.findOne', {

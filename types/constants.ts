@@ -51,7 +51,7 @@ export const COMMON_FIELDS = {
   createdBy: {
     type: 'number',
     readonly: true,
-    onCreate: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id || ctx?.meta?.authUser?.id,
+    onCreate: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id,
     populate: {
       action: 'users.resolve',
       params: {
@@ -69,7 +69,7 @@ export const COMMON_FIELDS = {
     type: 'number',
     readonly: true,
     hidden: 'byDefault',
-    onUpdate: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id || ctx?.meta?.authUser?.id,
+    onUpdate: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id,
     populate: {
       action: 'users.resolve',
       params: {
@@ -87,7 +87,7 @@ export const COMMON_FIELDS = {
   deletedBy: {
     type: 'number',
     readonly: true,
-    onRemove: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id || ctx?.meta?.authUser?.id,
+    onRemove: ({ ctx }: FieldHookCallback) => ctx?.meta?.user?.id,
     populate: {
       action: 'users.resolve',
       params: {
