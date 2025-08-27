@@ -1,7 +1,7 @@
 'use strict';
 
 import moleculer, { Context, RestSchema } from 'moleculer';
-import { Action, Method, Service } from 'moleculer-decorators';
+import { Action, Event, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
@@ -17,9 +17,9 @@ import {
   CommonActionParams,
   CommonFields,
   CommonPopulates,
+  EntityChangedParams,
   RestrictionType,
   Table,
-  fieldValueForDeletedScope,
   throwBadRequestError,
   throwNoRightsError,
   throwValidationError,
@@ -28,6 +28,7 @@ import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../
 import { UserAuthMeta } from './api.service';
 import { FamilyClassifier } from './familyClassifiers.service';
 import { IssuerClassifier } from './issuerClassifiers.service';
+import { PermitHistoryTypes } from './permits.histories.service';
 import { PermitSpecies } from './permits.species.service';
 import { Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
@@ -224,15 +225,6 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       aviarySizeIndoor: 'string',
       aviarySizeOutdoor: 'string',
       aviaryHeight: 'string',
-      deleteReason: {
-        type: 'string',
-        get: fieldValueForDeletedScope,
-        enum: Object.values(DeleteReasons),
-      },
-      deleteOtherReason: {
-        type: 'string',
-        get: fieldValueForDeletedScope,
-      },
       ...COMMON_FIELDS,
     },
     scopes: {
@@ -266,6 +258,34 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
 })
 export default class PermitsService extends moleculer.Service {
   @Action({
+    rest: 'GET /:id/history',
+    params: {
+      id: {
+        type: 'number',
+        convert: true,
+      },
+    },
+  })
+  async getHistory(
+    ctx: Context<{
+      id: number;
+      type?: string;
+      page?: number;
+      pageSize?: number;
+    }>,
+  ) {
+    return ctx.call(`permits.histories.${ctx.params.type || 'list'}`, {
+      sort: '-createdAt',
+      query: {
+        permit: ctx.params.id,
+      },
+      page: ctx.params.page,
+      pageSize: ctx.params.pageSize,
+      populate: 'createdBy',
+    });
+  }
+
+  @Action({
     rest: 'DELETE /:id',
     params: {
       id: {
@@ -297,15 +317,19 @@ export default class PermitsService extends moleculer.Service {
       throwNoRightsError();
     }
 
-    await ctx.call('permits.update', {
+    await ctx.call('permits.remove', {
       id,
-      deleteReason,
-      deleteOtherReason,
     });
 
-    return ctx.call('permits.remove', {
+    await this.createPermitHistory(
       id,
-    });
+      ctx.meta,
+      PermitHistoryTypes.DELETED,
+      deleteReason,
+      deleteOtherReason,
+    );
+
+    return id;
   }
 
   @Action({
@@ -718,5 +742,39 @@ export default class PermitsService extends moleculer.Service {
       ctx.params.user = !profile ? userId : null;
     }
     return ctx;
+  }
+
+  @Method
+  createPermitHistory(
+    permit: number | string,
+    meta: any,
+    type: string,
+    deleteReason?: DeleteReasons,
+    deleteOtherReason?: string,
+  ) {
+    return this.broker.call(
+      'permits.histories.create',
+      {
+        permit,
+        deleteReason,
+        deleteOtherReason,
+        type,
+      },
+      { meta },
+    );
+  }
+
+  @Event()
+  async 'permits.updated'(ctx: Context<EntityChangedParams<Permit>>) {
+    const { data: permit } = ctx.params;
+
+    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.UPDATED);
+  }
+
+  @Event()
+  async 'permits.created'(ctx: Context<EntityChangedParams<Permit>>) {
+    const { data: permit } = ctx.params;
+
+    await this.createPermitHistory((permit as Permit).id, ctx.meta, PermitHistoryTypes.CREATED);
   }
 }
