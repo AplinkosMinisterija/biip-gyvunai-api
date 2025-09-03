@@ -147,9 +147,9 @@ export interface User {
     find: {
       auth: RestrictionType.DEFAULT,
     },
-    list: {},
-    count: {},
-    get: {},
+    list: { auth: RestrictionType.DEFAULT },
+    count: { auth: RestrictionType.DEFAULT },
+    get: { auth: RestrictionType.DEFAULT },
     create: {
       rest: null,
     },
