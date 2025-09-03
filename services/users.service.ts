@@ -14,7 +14,7 @@ import { TenantUser, TenantUserRole } from './tenantUsers.service';
 
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
-import { AuthUserRole, UserAuthMeta } from './api.service';
+import { UserAuthMeta } from './api.service';
 
 export enum UserRole {
   ADMIN = 'ROLE_ADMIN',
@@ -163,7 +163,7 @@ export interface User {
 export default class UsersService extends moleculer.Service {
   @Method
   async filterTenant(ctx: Context<any, UserAuthMeta>) {
-    if (ctx.meta.user && !ctx.meta.profile) {
+    if (ctx.meta.user.type === UserType.USER && !ctx.meta.profile) {
       throw new ApiGateway.Errors.UnAuthorizedError('NO_RIGHTS', {
         error: 'Unauthorized',
       });
@@ -176,12 +176,7 @@ export default class UsersService extends moleculer.Service {
         },
         ...ctx.params.query,
       };
-    } else if (
-      !ctx.meta.user &&
-      ctx.meta.authUser &&
-      (ctx.meta.authUser.type === AuthUserRole.ADMIN ||
-        ctx.meta.authUser.type === AuthUserRole.SUPER_ADMIN)
-    ) {
+    } else if (ctx.meta.user && ctx.meta.user.type === UserType.ADMIN) {
       if (ctx.params.filter) {
         if (typeof ctx.params.filter === 'string') {
           ctx.params.filter = JSON.parse(ctx.params.filter);
