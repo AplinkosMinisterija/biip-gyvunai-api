@@ -6,7 +6,7 @@ exports.up = async function (knex) {
   await knex.raw(`
       UPDATE "permits"
       SET users = CASE
-        WHEN "userId" IS NOT NULL THEN jsonb_build_array("user_id")
+        WHEN "user_id" IS NOT NULL THEN jsonb_build_array("user_id")
         ELSE '[]'::jsonb
       END
     `);
