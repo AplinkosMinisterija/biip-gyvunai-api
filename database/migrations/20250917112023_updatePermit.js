@@ -1,11 +1,11 @@
-export async function up(knex) {
+exports.up = async function (knex) {
   await knex.schema.alterTable('permits', (table) => {
     table.jsonb('users');
   });
 
   await knex.raw(`
       UPDATE "permits"
-      SET users = CASE 
+      SET users = CASE
         WHEN "userId" IS NOT NULL THEN jsonb_build_array("userId")
         ELSE '[]'::jsonb
       END
@@ -14,9 +14,9 @@ export async function up(knex) {
   await knex.schema.alterTable('permits', (table) => {
     table.dropColumn('userId');
   });
-}
+};
 
-export async function down(knex) {
+exports.down = async function (knex) {
   await knex.schema.alterTable('permits', (table) => {
     table.integer('userId').unsigned();
   });
@@ -24,9 +24,10 @@ export async function down(knex) {
   await knex.raw(`
       UPDATE "permits"
       SET "userId" = (users->>0)::int
+      WHERE jsonb_array_length(users) > 0
     `);
 
   await knex.schema.alterTable('permits', (table) => {
     table.dropColumn('users');
   });
-}
+};
