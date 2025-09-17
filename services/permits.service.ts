@@ -4,7 +4,6 @@ import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Event, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
-import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
@@ -76,8 +75,8 @@ interface Fields extends CommonFields {
   cadastralIds: string[];
   buildingIds: string[];
   specialConditions: string;
-  tenant: number;
-  user: number;
+  tenants: number[];
+  users: number[];
   permitSpecies: {
     id: number;
     family: FamilyClassifier;
@@ -179,10 +178,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       protectedTerritory: 'boolean',
       note: 'string',
       info: 'string',
-      tenant: {
-        type: 'number',
-        columnType: 'integer',
-        columnName: 'tenantId',
+      tenants: {
+        columnType: 'json',
+        get: ({ entity }: { entity: Permit }) => entity.tenants || [],
+        items: { type: 'number' },
         populate: {
           action: 'tenants.resolve',
           params: {
@@ -190,10 +189,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           },
         },
       },
-      user: {
-        type: 'number',
-        columnType: 'integer',
-        columnName: 'userId',
+      users: {
+        columnType: 'jsonb',
+        get: ({ entity }: { entity: Permit }) => entity.tenants || [],
+        items: { type: 'number' },
         populate: {
           action: 'users.resolve',
           params: {
@@ -201,6 +200,7 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           },
         },
       },
+
       permitSpecies: {
         virtual: true,
         type: 'array',
@@ -236,12 +236,15 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   actions: {
     create: {
       rest: null,
+      auth: RestrictionType.ADMIN,
     },
     remove: {
       rest: null,
+      auth: RestrictionType.ADMIN,
     },
     update: {
       rest: null,
+      auth: RestrictionType.ADMIN,
     },
   },
   hooks: {
@@ -512,17 +515,7 @@ export default class PermitsService extends moleculer.Service {
       return { permit: null };
     }
 
-    const isCreatedBy =
-      (ctx?.meta?.profile && ctx?.meta?.profile === permit.tenant) ||
-      (!ctx.meta?.profile && ctx?.meta?.user?.id === permit.user);
-
     if (isAdmin(ctx)) {
-      return throwBadRequestError('Permit already exists');
-    }
-
-    if (!permit.user && !permit.tenant) return { permit };
-
-    if (isCreatedBy) {
       return throwBadRequestError('Permit already exists');
     }
 
@@ -562,12 +555,6 @@ export default class PermitsService extends moleculer.Service {
     });
     if (existingPermit) {
       return throwBadRequestError('Permit already exists');
-    }
-    if (!isAdmin(ctx)) {
-      const profile = ctx?.meta?.profile;
-      const userId = ctx?.meta?.user?.id;
-      ctx.params.tenant = profile || null;
-      ctx.params.user = !profile ? userId : null;
     }
 
     return ctx;
@@ -719,28 +706,14 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeUpdate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit = await this.resolveEntities(ctx, {
+    const existingPermit: Permit = await this.resolveEntities(ctx, {
       id: ctx.params.id,
       throwIfNotExist: true,
     });
     if (!existingPermit) {
       return throwValidationError('Invalid permit');
     }
-    if (!isAdmin(ctx)) {
-      const profile = ctx.meta.profile;
-      const userId = ctx.meta.user.id;
 
-      const sameUser = !profile && existingPermit.user === userId;
-      const sameTenant = profile && existingPermit.tenant === profile;
-      const permitAssigned = existingPermit.user || existingPermit.tenant;
-      if (permitAssigned && !(sameUser || sameTenant)) {
-        throw new ApiGateway.Errors.UnAuthorizedError('NO_RIGHTS', {
-          error: 'Unauthorized',
-        });
-      }
-      ctx.params.tenant = profile || null;
-      ctx.params.user = !profile ? userId : null;
-    }
     return ctx;
   }
 
