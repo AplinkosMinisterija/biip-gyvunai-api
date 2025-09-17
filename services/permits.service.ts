@@ -235,15 +235,12 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   actions: {
     create: {
       rest: null,
-      auth: RestrictionType.ADMIN,
     },
     remove: {
       rest: null,
-      auth: RestrictionType.ADMIN,
     },
     update: {
       rest: null,
-      auth: RestrictionType.ADMIN,
     },
   },
   hooks: {
@@ -346,6 +343,7 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: ['POST /', 'PATCH /:id'],
+    types: [RestrictionType.ADMIN],
   })
   async createOrUpdate(
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
