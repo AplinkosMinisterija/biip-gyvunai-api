@@ -75,7 +75,7 @@ interface Fields extends CommonFields {
   cadastralIds: string[];
   buildingIds: string[];
   specialConditions: string;
-  tenants: number[];
+  tenant: number;
   users: number[];
   permitSpecies: {
     id: number;
@@ -178,10 +178,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       protectedTerritory: 'boolean',
       note: 'string',
       info: 'string',
-      tenants: {
-        columnType: 'json',
-        get: ({ entity }: { entity: Permit }) => entity.tenants || [],
-        items: { type: 'number' },
+      tenant: {
+        type: 'number',
+        columnType: 'integer',
+        columnName: 'tenantId',
         populate: {
           action: 'tenants.resolve',
           params: {
