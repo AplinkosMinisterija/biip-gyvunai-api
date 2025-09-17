@@ -71,7 +71,6 @@ exports.up = async function (knex) {
 };
 
 exports.down = async function (knex) {
-  // 1️⃣ Atstatom user_id
   await knex.schema.alterTable('permits', (table) => {
     table.integer('userId').unsigned();
   });
