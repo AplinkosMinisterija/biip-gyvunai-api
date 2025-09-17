@@ -200,7 +200,6 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           },
         },
       },
-
       permitSpecies: {
         virtual: true,
         type: 'array',
