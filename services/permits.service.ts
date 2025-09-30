@@ -584,9 +584,17 @@ export default class PermitsService extends moleculer.Service {
       authToken: process.env.ADMIN_AUTH_TOKEN,
     };
 
+    const phoneNumberRegexPattern = new RegExp(/^(?:\+370|0)(?:3|4|5|6|7|8|9)\d{7}$/);
+
     const normalizePhone = (phone: string | undefined): string | null => {
       if (!phone) return null;
-      return phone.toString().trim().split(' ')[0].replace(/^8/, '0') || null;
+      const normalized = phone.toString().trim().split(' ')[0].replace(/^8/, '0');
+
+      if (!phoneNumberRegexPattern.test(normalized)) {
+        return null;
+      }
+
+      return normalized;
     };
 
     await Promise.all(
