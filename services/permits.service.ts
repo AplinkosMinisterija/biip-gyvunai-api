@@ -1,7 +1,9 @@
 'use strict';
 
+import { personalCode } from 'lt-codes';
 import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Event, Method, Service } from 'moleculer-decorators';
+import xlsx from 'xlsx';
 
 import PostgisMixin from 'moleculer-postgis';
 import ApiGateway from 'moleculer-web';
@@ -527,6 +529,126 @@ export default class PermitsService extends moleculer.Service {
     }
 
     throwValidationError('Invalid permit');
+  }
+
+  @Action()
+  async importUsers(ctx: Context<any, any>): Promise<any> {
+    const workbook = xlsx.readFile('Nelaisve.xlsx', { cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils
+      .sheet_to_json(workbook.Sheets[sheetName], { raw: true })
+      .filter((permit: any) => permit['Naudotojo tipas'] === 'Fizinis asmuo');
+
+    function formatExcelDate(value: any) {
+      if (value instanceof Date) {
+        const fixed = new Date(value);
+        fixed.setDate(fixed.getDate() + 1);
+        return fixed.toISOString().split('T')[0];
+      }
+
+      if (typeof value === 'number') {
+        const epoch = new Date(1899, 11, 30);
+        const jsDate = new Date(epoch.getTime() + value * 86400000);
+        jsDate.setDate(jsDate.getDate() + 1);
+        return jsDate.toISOString().split('T')[0];
+      }
+
+      if (typeof value === 'string') {
+        const match = value.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+        if (match) {
+          const day = parseInt(match[1], 10);
+          const month = parseInt(match[2], 10) - 1;
+          const year = parseInt(match[3], 10);
+          const jsDate = new Date(year, month, day);
+          return jsDate.toISOString().split('T')[0];
+        }
+
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().split('T')[0];
+        }
+      }
+
+      return value;
+    }
+
+    const issuers: IssuerClassifier[] = await ctx.call('issuerClassifiers.find');
+
+    const issuerMap = issuers.reduce((obj, curr) => {
+      obj[curr.name] = curr.id;
+
+      return obj;
+    }, {} as any);
+
+    ctx.meta = {
+      authToken: process.env.ADMIN_AUTH_TOKEN,
+    };
+
+    const phoneNumberRegexPattern = new RegExp(/^(?:\+370|0)(?:3|4|5|6|7|8|9)\d{7}$/);
+
+    const normalizePhone = (phone: string | undefined): string | null => {
+      if (!phone) return null;
+      const normalized = phone.toString().trim().split(' ')[0].replace(/^8/, '0');
+
+      if (!phoneNumberRegexPattern.test(normalized)) {
+        return null;
+      }
+
+      return normalized;
+    };
+
+    for (const permit of data as any[]) {
+      const personalCodeValue = (permit['Įmonės kodas/Asmens kodas'] || '').toString();
+      const isValidPersonalCode = personalCode.validate(personalCodeValue);
+
+      const fullNameParts = (permit['Įmonės pavadinimas/Vardas pavardė'] || '').trim().split(/\s+/);
+      const firstName = fullNameParts[0] || null;
+      const lastName = fullNameParts.length > 1 ? fullNameParts[fullNameParts.length - 1] : null;
+
+      function isValidEmail(email: string | null): boolean {
+        if (!email) return false;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+      }
+
+      const rawEmail = permit?.['El.pašto adresas']?.toString().trim() || null;
+      const email = rawEmail && isValidEmail(rawEmail) ? rawEmail : null;
+      const phone = normalizePhone(permit['Telefonas']);
+
+      if (!isValidPersonalCode.isValid || !firstName || !lastName || !email || !phone) {
+        continue;
+      }
+
+      const existingPermit: Permit | null = await ctx.call('permits.findOne', {
+        query: {
+          permitNumber: permit['Leidimo Nr.'].replace(/^Nr. /, ''),
+          issuer: issuerMap[permit['Leidimą išdavusi institucija']],
+          issueDate: formatExcelDate(permit['Leidimo išdavimo data']),
+        },
+      });
+
+      if (!existingPermit) {
+        continue;
+      }
+
+      const authUser: any = await ctx.call('auth.users.invite', {
+        personalCode: personalCodeValue,
+        throwErrors: false,
+      });
+
+      const user: User = await ctx.call('users.findOrCreate', {
+        authUser: authUser,
+        firstName,
+        lastName,
+        email,
+        phone,
+        update: true,
+      });
+
+      await ctx.call('permits.update', {
+        id: existingPermit.id,
+        user: user.id,
+      });
+    }
   }
 
   @Action({
