@@ -597,58 +597,58 @@ export default class PermitsService extends moleculer.Service {
       return normalized;
     };
 
-    await Promise.all(
-      data.map(async (permit: any) => {
-        const personalCodeValue = (permit['Įmonės kodas/Asmens kodas'] || '').toString();
-        const isValidPersonalCode = personalCode.validate(personalCodeValue);
+    for (const permit of data as any[]) {
+      const personalCodeValue = (permit['Įmonės kodas/Asmens kodas'] || '').toString();
+      const isValidPersonalCode = personalCode.validate(personalCodeValue);
 
-        const fullNameParts = (permit['Įmonės pavadinimas/Vardas pavardė'] || '')
-          .trim()
-          .split(/\s+/);
-        const firstName = fullNameParts[0] || null;
-        const lastName = fullNameParts.length > 1 ? fullNameParts[fullNameParts.length - 1] : null;
+      const fullNameParts = (permit['Įmonės pavadinimas/Vardas pavardė'] || '').trim().split(/\s+/);
+      const firstName = fullNameParts[0] || null;
+      const lastName = fullNameParts.length > 1 ? fullNameParts[fullNameParts.length - 1] : null;
 
-        const email = permit?.['El.pašto adresas'] || null;
-        const phone = normalizePhone(permit['Telefonas']);
+      function isValidEmail(email: string | null): boolean {
+        if (!email) return false;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+      }
 
-        if (!isValidPersonalCode || !firstName || !lastName || !email || !phone) {
-          return null;
-        }
+      const rawEmail = permit?.['El.pašto adresas']?.toString().trim() || null;
+      const email = rawEmail && isValidEmail(rawEmail) ? rawEmail : null;
+      const phone = normalizePhone(permit['Telefonas']);
 
-        const existingPermit: Permit | null = await ctx.call('permits.findOne', {
-          query: {
-            permitNumber: permit['Leidimo Nr.'].replace(/^Nr. /, ''),
-            issuer: issuerMap[permit['Leidimą išdavusi institucija']],
-            issueDate: formatExcelDate(permit['Leidimo išdavimo data']),
-          },
-        });
+      if (!isValidPersonalCode.isValid || !firstName || !lastName || !email || !phone) {
+        continue;
+      }
 
-        if (!existingPermit) {
-          return null;
-        }
+      const existingPermit: Permit | null = await ctx.call('permits.findOne', {
+        query: {
+          permitNumber: permit['Leidimo Nr.'].replace(/^Nr. /, ''),
+          issuer: issuerMap[permit['Leidimą išdavusi institucija']],
+          issueDate: formatExcelDate(permit['Leidimo išdavimo data']),
+        },
+      });
 
-        const authUser: any = await ctx.call('auth.users.invite', {
-          personalCode: personalCodeValue,
-          throwErrors: false,
-        });
+      if (!existingPermit) {
+        continue;
+      }
 
-        const user: User = await ctx.call('users.findOrCreate', {
-          authUser: authUser,
-          firstName,
-          lastName,
-          email,
-          phone,
-          update: true,
-        });
+      const authUser: any = await ctx.call('auth.users.invite', {
+        personalCode: personalCodeValue,
+        throwErrors: false,
+      });
 
-        await ctx.call('permits.update', {
-          id: existingPermit.id,
-          user: user.id,
-        });
+      const user: User = await ctx.call('users.findOrCreate', {
+        authUser: authUser,
+        firstName,
+        lastName,
+        email,
+        phone,
+        update: true,
+      });
 
-        return existingPermit.id;
-      }),
-    );
+      await ctx.call('permits.update', {
+        id: existingPermit.id,
+        user: user.id,
+      });
+    }
   }
 
   @Action({
