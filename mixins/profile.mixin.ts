@@ -21,7 +21,7 @@ export default {
           // personal profile
           if (!ctx.meta.profile && ctx.meta.user) {
             ctx.params.query = {
-              user: ctx.meta.user.id,
+              users: { $contains: [ctx.meta.user.id] },
               ...q,
             };
           }
