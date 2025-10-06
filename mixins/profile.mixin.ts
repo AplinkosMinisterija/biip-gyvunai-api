@@ -23,7 +23,7 @@ export default {
             ctx.params.query = {
               users: {
                 $raw: {
-                  condition: `"users" @> ARRAY[?]::int[]`,
+                  condition: `"users" @> ARRAY[?]::int[] AND cardinality("users") > 0`,
                   bindings: [Number(ctx.meta.user.id)],
                 },
               },
