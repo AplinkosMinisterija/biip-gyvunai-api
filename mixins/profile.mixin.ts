@@ -37,7 +37,7 @@ export default {
           ctx.params.query = {
             users: {
               $raw: {
-                condition: `"users" @> to_jsonb(?)::jsonb`,
+                condition: `"users" @> to_jsonb(?::int[])`,
                 bindings: [[userId]],
               },
             },
