@@ -37,8 +37,8 @@ export default {
           ctx.params.query = {
             users: {
               $raw: {
-                condition: `"users" @> ARRAY[?]::int[] AND cardinality("users") > 0`,
-                bindings: [userId],
+                condition: `"users" @> to_jsonb(?)::jsonb`,
+                bindings: [[userId]], // must be wrapped in array brackets
               },
             },
             ...q,
