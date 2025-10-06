@@ -38,7 +38,7 @@ export default {
             users: {
               $raw: {
                 condition: `"users" @> to_jsonb(?)::jsonb`,
-                bindings: [[userId]], // must be wrapped in array brackets
+                bindings: [[userId]],
               },
             },
             ...q,
