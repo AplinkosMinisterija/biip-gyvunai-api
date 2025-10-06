@@ -21,7 +21,12 @@ export default {
           // personal profile
           if (!ctx.meta.profile && ctx.meta.user) {
             ctx.params.query = {
-              users: { $contains: [ctx.meta.user.id] },
+              users: {
+                $raw: {
+                  condition: `"users" @> ARRAY[?]::int[]`,
+                  bindings: [Number(ctx.meta.user.id)],
+                },
+              },
               ...q,
             };
           }
