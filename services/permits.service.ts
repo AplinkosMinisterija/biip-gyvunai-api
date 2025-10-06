@@ -246,11 +246,11 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   hooks: {
     before: {
       create: 'beforeCreate',
-      list: 'beforeSelect',
-      find: 'beforeSelect',
-      count: 'beforeSelect',
-      get: 'beforeSelect',
-      all: 'beforeSelect',
+      list: 'beforeSelectPermit',
+      find: 'beforeSelectPermit',
+      count: 'beforeSelectPermit',
+      get: 'beforeSelectPermit',
+      all: 'beforeSelectPermit',
       update: 'beforeUpdate',
     },
   },
