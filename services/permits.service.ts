@@ -68,6 +68,7 @@ interface Fields extends CommonFields {
   };
   forest: boolean;
   fencingOffDate: string;
+  fencingOffStartDate: string;
   fencedArea: number;
   protectedTerritory: boolean;
   note: string;
@@ -174,6 +175,8 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       },
       forest: 'boolean',
       fencingOffDate: 'string',
+      fencingOffStartDate: 'string',
+
       fencedArea: 'number',
       protectedTerritory: 'boolean',
       note: 'string',
