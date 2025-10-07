@@ -285,7 +285,7 @@ export default class AnimalsService extends moleculer.Service {
 
     ctx.params.speciesClassifier = existingSpecies.speciesClassifier;
     ctx.params.permit = existingSpecies.permit?.id;
-    ctx.params.user = existingSpecies.permit?.user;
+    ctx.params.user = existingSpecies.permit?.users.find((u: any) => u?.id === userId);
     ctx.params.tenant = existingSpecies.permit?.tenant;
 
     if (
@@ -294,7 +294,7 @@ export default class AnimalsService extends moleculer.Service {
       )
     ) {
       const isTenantPermit = !!profile && existingSpecies.permit?.tenant == profile;
-      const isUserPermit = !profile && existingSpecies.permit?.user == userId;
+      const isUserPermit = !profile && existingSpecies.permit?.users.includes(userId);
       if (
         !isTenantPermit &&
         !isUserPermit &&

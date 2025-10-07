@@ -322,7 +322,7 @@ export default class SpeciesService extends moleculer.Service {
         )
       ) {
         const isTenantPermit = !!profile && existingPermit.tenant == profile;
-        const isUserPermit = !profile && existingPermit.user == userId;
+        const isUserPermit = !profile && existingPermit.users.includes(userId);
         if (!isTenantPermit && !isUserPermit) {
           throw new moleculer.Errors.MoleculerClientError(`Invalid permit`, 422, 'INVALID_PERMIT');
         }

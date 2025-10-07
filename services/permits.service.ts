@@ -4,7 +4,6 @@ import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Event, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
-import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
@@ -77,7 +76,7 @@ interface Fields extends CommonFields {
   buildingIds: string[];
   specialConditions: string;
   tenant: number;
-  user: number;
+  users: number[];
   permitSpecies: {
     id: number;
     family: FamilyClassifier;
@@ -190,10 +189,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           },
         },
       },
-      user: {
-        type: 'number',
-        columnType: 'integer',
-        columnName: 'userId',
+      users: {
+        columnType: 'jsonb',
+        get: ({ entity }: { entity: Permit }) => entity.users || [],
+        items: { type: 'number' },
         populate: {
           action: 'users.resolve',
           params: {
@@ -247,11 +246,11 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   hooks: {
     before: {
       create: 'beforeCreate',
-      list: 'beforeSelect',
-      find: 'beforeSelect',
-      count: 'beforeSelect',
-      get: 'beforeSelect',
-      all: 'beforeSelect',
+      list: 'beforeSelectPermit',
+      find: 'beforeSelectPermit',
+      count: 'beforeSelectPermit',
+      get: 'beforeSelectPermit',
+      all: 'beforeSelectPermit',
       update: 'beforeUpdate',
     },
   },
@@ -344,6 +343,7 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: ['POST /', 'PATCH /:id'],
+    types: [RestrictionType.ADMIN],
   })
   async createOrUpdate(
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
@@ -512,17 +512,7 @@ export default class PermitsService extends moleculer.Service {
       return { permit: null };
     }
 
-    const isCreatedBy =
-      (ctx?.meta?.profile && ctx?.meta?.profile === permit.tenant) ||
-      (!ctx.meta?.profile && ctx?.meta?.user?.id === permit.user);
-
     if (isAdmin(ctx)) {
-      return throwBadRequestError('Permit already exists');
-    }
-
-    if (!permit.user && !permit.tenant) return { permit };
-
-    if (isCreatedBy) {
       return throwBadRequestError('Permit already exists');
     }
 
@@ -562,12 +552,6 @@ export default class PermitsService extends moleculer.Service {
     });
     if (existingPermit) {
       return throwBadRequestError('Permit already exists');
-    }
-    if (!isAdmin(ctx)) {
-      const profile = ctx?.meta?.profile;
-      const userId = ctx?.meta?.user?.id;
-      ctx.params.tenant = profile || null;
-      ctx.params.user = !profile ? userId : null;
     }
 
     return ctx;
@@ -719,28 +703,14 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeUpdate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit = await this.resolveEntities(ctx, {
+    const existingPermit: Permit = await this.resolveEntities(ctx, {
       id: ctx.params.id,
       throwIfNotExist: true,
     });
     if (!existingPermit) {
       return throwValidationError('Invalid permit');
     }
-    if (!isAdmin(ctx)) {
-      const profile = ctx.meta.profile;
-      const userId = ctx.meta.user.id;
 
-      const sameUser = !profile && existingPermit.user === userId;
-      const sameTenant = profile && existingPermit.tenant === profile;
-      const permitAssigned = existingPermit.user || existingPermit.tenant;
-      if (permitAssigned && !(sameUser || sameTenant)) {
-        throw new ApiGateway.Errors.UnAuthorizedError('NO_RIGHTS', {
-          error: 'Unauthorized',
-        });
-      }
-      ctx.params.tenant = profile || null;
-      ctx.params.user = !profile ? userId : null;
-    }
     return ctx;
   }
 
