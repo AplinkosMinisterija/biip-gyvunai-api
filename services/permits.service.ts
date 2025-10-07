@@ -191,7 +191,6 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       },
       users: {
         columnType: 'jsonb',
-        get: ({ entity }: { entity: Permit }) => entity.users || [],
         items: { type: 'number' },
         populate: {
           action: 'users.resolve',
