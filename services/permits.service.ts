@@ -190,7 +190,7 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
         },
       },
       users: {
-        columnType: 'jsonb',
+        columnType: 'array',
         items: { type: 'number' },
         populate: {
           action: 'users.resolve',
