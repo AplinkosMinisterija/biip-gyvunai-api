@@ -3,7 +3,7 @@
  * @returns { Promise<void> }
  */
 exports.up = function (knex) {
-  return knex.schema.alterTable('permits', (table) => {
+  return knex.schema.alterTable('records', (table) => {
     table.timestamp('markingDate');
   });
 };
@@ -13,7 +13,7 @@ exports.up = function (knex) {
  * @returns { Promise<void> }
  */
 exports.down = function (knex) {
-  return knex.schema.alterTable('permits', (table) => {
+  return knex.schema.alterTable('records', (table) => {
     table.dropColumn('markingDate');
   });
 };
