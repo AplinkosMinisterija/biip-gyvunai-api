@@ -92,6 +92,7 @@ interface Fields extends CommonFields {
   };
   acquireDate: string;
   vetExaminationDate: string;
+  markingDate: string;
   municipality: any;
   transferRecipient: {
     type: LegalForm;
@@ -216,6 +217,7 @@ export type Record<
       },
       acquireDate: 'string',
       vetExaminationDate: 'string',
+      markingDate: 'string',
       municipality: 'object',
       transferRecipient: 'object',
       tenant: {
