@@ -215,6 +215,7 @@ export default class AnimalsService extends moleculer.Service {
         enum: Object.values(Gender),
       },
       birthDate: 'string',
+      markingDate: 'string|optional',
       certificate: 'string|optional',
       markingType: 'number|optional',
       markingNumber: 'string|optional',
@@ -228,6 +229,7 @@ export default class AnimalsService extends moleculer.Service {
       await ctx.call('records.newRecord', {
         type: RecordType.BIRTH,
         date: ctx.params.birthDate,
+        markingDate: ctx.params?.markingDate,
         numberOfAnimals: 1,
         animal: animal.id,
         species: animal.species,
@@ -254,6 +256,7 @@ export default class AnimalsService extends moleculer.Service {
       await ctx.call('records.newRecord', {
         type: RecordType.MARKING,
         date: ctx.params.birthDate,
+        markingDate: ctx.params?.markingDate,
         numberOfAnimals: 1,
         markingNumber: ctx.params.markingNumber,
         markingType: ctx.params.markingType,
