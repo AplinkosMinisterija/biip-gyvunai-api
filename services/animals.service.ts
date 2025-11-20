@@ -267,6 +267,7 @@ export default class AnimalsService extends moleculer.Service {
         tenant: animal.tenant,
       });
     }
+
     return this.findEntity(ctx, { id: animal.id });
   }
 
@@ -288,7 +289,7 @@ export default class AnimalsService extends moleculer.Service {
 
     ctx.params.speciesClassifier = existingSpecies.speciesClassifier;
     ctx.params.permit = existingSpecies.permit?.id;
-    ctx.params.user = existingSpecies.permit?.users.find((u: any) => u?.id === userId);
+    ctx.params.user = existingSpecies.permit?.users.find((u: any) => u === userId);
     ctx.params.tenant = existingSpecies.permit?.tenant;
 
     if (
