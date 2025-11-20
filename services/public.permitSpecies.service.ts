@@ -8,6 +8,7 @@ import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 export interface Municipality {
   id: string;
   name: string;
+  permits: number;
 }
 
 export interface PublicPermitSpeciesStat {
@@ -58,6 +59,7 @@ export interface PublicPermitSpeciesStat {
           properties: {
             id: 'string',
             name: 'string',
+            permits: 'number',
           },
         },
         columnType: 'jsonb',
