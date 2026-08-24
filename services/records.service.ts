@@ -172,6 +172,7 @@ export type Record<
         type: 'number',
         columnType: 'integer',
         columnName: 'speciesClassifierId',
+        deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
         },

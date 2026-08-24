@@ -8,12 +8,25 @@ const FIELDS = [
   { name: 'permitNumber' },
   { name: 'createdAt' },
   { name: 'municipality' },
+  { name: 'speciesClassifier' },
   { name: 'markingRecord', virtual: true },
 ];
+
+const SPECIES_CLASSIFIER_FIELDS = [{ name: 'id' }, { name: 'name' }, { name: 'nameLatin' }];
 
 const createService = () => ({
   ...ProfileMixin.methods,
   $fields: FIELDS,
+  settings: {
+    fields: {
+      municipality: 'any',
+      speciesClassifier: { deepQuery: 'speciesClassifiers' },
+    },
+  },
+  broker: {
+    getLocalService: (name: string) =>
+      name === 'speciesClassifiers' ? { $fields: SPECIES_CLASSIFIER_FIELDS } : undefined,
+  },
 });
 
 const createCtx = (params: any = {}, meta: any = { authUser: { type: AuthUserRole.ADMIN } }) => ({
@@ -68,6 +81,27 @@ describe('profile.mixin beforeSelect sort handling', () => {
   it('falls back to the default sort when no requested key is sortable', () => {
     const service = createService();
     const ctx = service.beforeSelect(createCtx({ sort: ['municipality.name'] }) as any);
+
+    expect(ctx.params.sort).toEqual('-createdAt');
+  });
+
+  it('keeps dotted sort keys backed by a deepQuery relation', () => {
+    const service = createService();
+    const ctx = service.beforeSelect(createCtx({ sort: ['-speciesClassifier.name'] }) as any);
+
+    expect(ctx.params.sort).toEqual(['-speciesClassifier.name']);
+  });
+
+  it('drops dotted sort keys whose column does not exist on the related service', () => {
+    const service = createService();
+    const ctx = service.beforeSelect(createCtx({ sort: ['speciesClassifier.bogus'] }) as any);
+
+    expect(ctx.params.sort).toEqual('-createdAt');
+  });
+
+  it('drops dotted sort keys deeper than one relation level', () => {
+    const service = createService();
+    const ctx = service.beforeSelect(createCtx({ sort: ['speciesClassifier.family.name'] }) as any);
 
     expect(ctx.params.sort).toEqual('-createdAt');
   });
