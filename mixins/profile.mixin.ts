@@ -1,6 +1,11 @@
 import { Context } from 'moleculer';
 import { AuthUserRole, UserAuthMeta } from '../services/api.service';
 
+type ProcessedField = { name: string; virtual?: boolean };
+
+const isRealColumn = (fields: ProcessedField[] | undefined, fieldName: string): boolean =>
+  !!fields?.some((field) => field.name === fieldName && !field.virtual);
+
 export default {
   methods: {
     // Leidžia rūšiuoti tik pagal realias (ne virtualias) lenteles kolonas —
@@ -12,12 +17,30 @@ export default {
         ? sort
         : String(sort).replace(/,/g, ' ').split(' ').filter(Boolean);
 
-      const sortable = items.filter((item) => {
-        const fieldName = String(item).replace(/^-/, '');
-        return this.$fields?.some((field: any) => field.name === fieldName && !field.virtual);
-      });
+      const sortable = items.filter((item) => this.isSortableField(String(item).replace(/^-/, '')));
 
       return sortable.length ? sortable : undefined;
+    },
+
+    isSortableField(fieldName: string): boolean {
+      const [rootField, ...nestedParts] = fieldName.split('.');
+
+      if (!nestedParts.length) {
+        return isRealColumn(this.$fields, fieldName);
+      }
+
+      // Taškuotas raktas (pvz. `speciesClassifier.name`) rūšiuoja per susijusią
+      // lentelę — leidžiama tik kai šakninis laukas turi service tipo `deepQuery`
+      // (tada moleculer-accounts DeepQueryMixin pats prijungia lentelę), o likusi
+      // dalis yra reali to serviso kolona.
+      if (nestedParts.length !== 1) return false;
+
+      const deepQuery = this.settings?.fields?.[rootField]?.deepQuery;
+      const serviceName = typeof deepQuery === 'string' ? deepQuery : deepQuery?.service;
+      if (typeof serviceName !== 'string') return false;
+
+      const service = this.broker?.getLocalService(serviceName);
+      return isRealColumn(service?.$fields, nestedParts[0]);
     },
 
     applyAccessFilter(ctx: Context<any, UserAuthMeta>, useRawUsers = false) {

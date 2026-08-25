@@ -132,6 +132,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
         columnType: 'integer',
         columnName: 'speciesClassifierId',
         required: true,
+        deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
         },
