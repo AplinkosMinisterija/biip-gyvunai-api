@@ -13,6 +13,7 @@ import {
   CommonFields,
   CommonPopulates,
   Gender,
+  RecordType,
   Table,
 } from '../types';
 import { Animal } from './animals.service';
@@ -25,22 +26,9 @@ import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
-export enum RecordType {
-  ACQUIREMENT = 'ACQUIREMENT',
-  BIRTH = 'BIRTH',
-  DEATH = 'DEATH',
-  VACCINATION = 'VACCINATION',
-  SALE = 'SALE',
-  TREATMENT = 'TREATMENT',
-  MARKING = 'MARKING',
-  PICK_UP_FROM_NATURE = 'PICK_UP_FROM_NATURE',
-  OBTAINMENT_OF_FOSTERED_ANIMAL = 'OBTAINMENT_OF_FOSTERED_ANIMAL',
-  RELEASE = 'RELEASE',
-  TRANSFER = 'TRANSFER',
-  GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
-  CERTIFICATE_NO = 'CERTIFICATE_NO',
-  OTHER = 'OTHER',
-}
+// RecordType gyvena types/constants.ts (naudoja ir modules/speciesAmount.ts) — čia re-eksportuojamas,
+// kad esami importai iš records.service nesikeistų.
+export { RecordType };
 
 export enum DeathReason {
   EUTHANIZED = 'EUTHANIZED',
