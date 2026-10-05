@@ -106,3 +106,87 @@ describe('profile.mixin beforeSelect sort handling', () => {
     expect(ctx.params.sort).toEqual('-createdAt');
   });
 });
+
+describe('profile.mixin beforeMutate ownership', () => {
+  const entity = { id: 7, tenant: 3, user: 5, species: 11 };
+
+  const mutateService = () => ({
+    ...createService(),
+    resolveEntities: jest.fn().mockResolvedValue(entity),
+  });
+
+  const createMutateCtx = (params: any, meta: any) => ({ params, meta, locals: {} });
+
+  it('admin resolves the entity without an access filter and keeps ownership params', async () => {
+    const service = mutateService();
+    const ctx = await service.beforeMutate(
+      createMutateCtx({ id: 7, tenant: 9 }, { authUser: { type: AuthUserRole.ADMIN } }) as any,
+    );
+
+    expect(service.resolveEntities).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 7, query: {} },
+      { throwIfNotExist: true },
+    );
+    expect(ctx.params.tenant).toBe(9);
+    expect(ctx.locals.entity).toEqual(entity);
+  });
+
+  it('tenant profile user is restricted to the tenant and cannot reassign ownership', async () => {
+    const service = mutateService();
+    const ctx = await service.beforeMutate(
+      createMutateCtx(
+        { id: 7, tenant: 9, user: 1 },
+        { authUser: { type: AuthUserRole.USER }, user: { id: 5 }, profile: 3 },
+      ) as any,
+    );
+
+    expect(service.resolveEntities).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 7, query: { tenant: 3 } },
+      { throwIfNotExist: true },
+    );
+    expect(ctx.params.tenant).toBe(3);
+    expect(ctx.params.user).toBe(5);
+  });
+
+  it('profile-less user is restricted to own rows', async () => {
+    const service = mutateService();
+    await service.beforeMutate(
+      createMutateCtx({ id: 7 }, { authUser: { type: AuthUserRole.USER }, user: { id: 5 } }) as any,
+    );
+
+    expect(service.resolveEntities).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 7, query: { user: 5 } },
+      { throwIfNotExist: true },
+    );
+  });
+
+  it('drops an ownership param when the entity has no owner value to keep', async () => {
+    const service = mutateService();
+    service.resolveEntities.mockResolvedValue({ id: 7, tenant: null, user: 5 });
+    const ctx = await service.beforeMutate(
+      createMutateCtx(
+        { id: 7, tenant: 9 },
+        { authUser: { type: AuthUserRole.USER }, user: { id: 5 } },
+      ) as any,
+    );
+
+    expect(ctx.params).toEqual({ id: 7 });
+  });
+
+  it('propagates the not-found error for a foreign entity', async () => {
+    const service = mutateService();
+    service.resolveEntities.mockRejectedValue(new Error('EntityNotFound'));
+
+    await expect(
+      service.beforeMutate(
+        createMutateCtx(
+          { id: 7 },
+          { authUser: { type: AuthUserRole.USER }, user: { id: 5 } },
+        ) as any,
+      ),
+    ).rejects.toThrow('EntityNotFound');
+  });
+});
