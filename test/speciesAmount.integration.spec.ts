@@ -34,6 +34,12 @@ describe('species amount recalculation (integration)', () => {
     await knex.destroy();
   });
 
+  it('recalculates the amount before sending notification mail', () => {
+    const hooks = broker.getLocalService('records').schema.hooks?.after as Record<string, string[]>;
+
+    expect(hooks.create).toEqual(['recalculateSpeciesAmount', 'afterCreate']);
+  });
+
   describe('group accounting species', () => {
     let speciesId: number;
     let transferId: number;

@@ -223,6 +223,8 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: ['permit', 'amount', 'type', 'possessionType'],
     defaultPopulates: [],
   },
   hooks: {

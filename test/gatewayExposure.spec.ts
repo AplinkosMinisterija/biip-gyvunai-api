@@ -1,6 +1,7 @@
 'use strict';
 
 import { ServiceBroker } from 'moleculer';
+import MinioService from '../services/minio.service';
 import { createTestBroker, knex } from './helpers/testBroker';
 
 // API gateway naudoja `mappingPolicy: 'all'`: kiekvienas publikuotas veiksmas pasiekiamas
@@ -27,6 +28,27 @@ describe('gateway exposure invariant', () => {
       .filter(({ action }) => action.rest === undefined || action.rest === null)
       .map(({ name }) => name)
       .filter((name) => !name.startsWith('$'))
+      .sort();
+
+    expect(exposedWithoutAlias).toEqual([]);
+  });
+
+  // minio startuoti testuose negalima (jungiasi prie MinIO), todėl tikrinama tik sujungta schema.
+  it('minio service hides every mixin action without a REST alias', () => {
+    const schemaBroker = new ServiceBroker({ logger: false });
+    const service = schemaBroker.createService(MinioService);
+    const actions = service.schema.actions as Record<
+      string,
+      { rest?: unknown; visibility?: string } | ((...args: unknown[]) => unknown)
+    >;
+
+    const exposedWithoutAlias = Object.entries(actions)
+      .filter((entry): entry is [string, { rest?: unknown; visibility?: string }] => {
+        return typeof entry[1] === 'object';
+      })
+      .filter(([, action]) => !action.visibility || action.visibility === 'published')
+      .filter(([, action]) => action.rest === undefined || action.rest === null)
+      .map(([name]) => name)
       .sort();
 
     expect(exposedWithoutAlias).toEqual([]);

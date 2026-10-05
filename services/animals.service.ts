@@ -189,6 +189,8 @@ export type Animal<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: ['species', 'permit', 'speciesClassifier'],
   },
   hooks: {
     before: {
@@ -318,12 +320,18 @@ export default class AnimalsService extends moleculer.Service {
     return ctx;
   }
 
-  // `remove` grąžina tik id, todėl rūšis imama iš `beforeMutate` įsiminto gyvūno.
+  // Perskaičiuojama ir ankstesnė (`beforeMutate` įsiminta), ir dabartinė gyvūno rūšis —
+  // administratoriui perkėlus gyvūną kitai rūšiai, abi turi teisingą kiekį.
+  // `remove` grąžina tik id, todėl pašalintas gyvūnas imamas iš `ctx.locals.entity`.
   @Method
   async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Animal | number) {
-    const speciesId = (typeof result === 'object' && result?.species) || ctx.locals.entity?.species;
-    if (speciesId) {
-      await ctx.call('species.recalculateAmount', { id: speciesId });
+    const previousSpecies: number | undefined = ctx.locals.entity?.species;
+    const currentSpecies = typeof result === 'object' ? result?.species : previousSpecies;
+    const speciesIds = new Set(
+      [previousSpecies, currentSpecies].filter((id): id is number => !!id),
+    );
+    for (const id of speciesIds) {
+      await ctx.call('species.recalculateAmount', { id });
     }
     return result;
   }

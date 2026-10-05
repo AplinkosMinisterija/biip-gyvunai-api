@@ -44,19 +44,16 @@ describe('ownership on update/remove (integration)', () => {
     );
     animalId = animal.id;
 
-    await broker.call(
+    const record: { id: number } = await broker.call(
       'records.newRecord',
       { animal: animalId, type: 'VACCINATION', date: '2026-02-02' },
       { meta: userMeta({ userId: OWNER }) },
     );
-    // newRecord dar negrąžina sukurto įrašo (afterCreate hook'as negrąžina rezultato) — imama iš DB.
-    const [record] = await knex('records').where({ animalId, type: 'VACCINATION' }).select('id');
-    recordId = Number(record.id);
+    recordId = record.id;
   });
 
   afterAll(async () => {
     await broker.stop();
-    await knex.destroy();
   });
 
   it('owner can update own animal', async () => {
@@ -116,4 +113,111 @@ describe('ownership on update/remove (integration)', () => {
       broker.call('records.get', { id: recordId }, { meta: userMeta({ userId: OWNER }) }),
     ).rejects.toMatchObject({ code: 404 });
   });
+});
+
+describe('reference fields are frozen for non-admin updates (integration)', () => {
+  let broker: ServiceBroker;
+  let ownSpeciesId: number;
+  let otherSpeciesId: number;
+  let animalId: number;
+  let recordId: number;
+
+  beforeAll(async () => {
+    await resetDomainTables();
+    broker = await createTestBroker();
+    const permitId = await createPermitFixture({ permitNumber: 'FROZEN-1', users: [OWNER] });
+    const meta = userMeta({ userId: OWNER });
+
+    const own: { id: number } = await broker.call(
+      'species.newSpecies',
+      { permit: permitId, speciesClassifier: 1, possessionType: 'WITH_PERMIT', type: 'GROUP' },
+      { meta },
+    );
+    const other: { id: number } = await broker.call(
+      'species.newSpecies',
+      { permit: permitId, speciesClassifier: 2, possessionType: 'WITH_PERMIT', type: 'GROUP' },
+      { meta },
+    );
+    ownSpeciesId = own.id;
+    otherSpeciesId = other.id;
+
+    const record: { id: number } = await broker.call(
+      'records.newRecord',
+      { species: ownSpeciesId, type: 'ACQUIREMENT', date: '2026-03-01', numberOfAnimals: 5 },
+      { meta },
+    );
+    recordId = record.id;
+
+    const individual: { id: number } = await broker.call(
+      'species.newSpecies',
+      { permit: permitId, speciesClassifier: 3, possessionType: 'WITH_PERMIT', type: 'INDIVIDUAL' },
+      { meta },
+    );
+    const animal: { id: number } = await broker.call(
+      'animals.newAnimal',
+      { species: individual.id, gender: 'MALE', birthDate: '2025-05-05' },
+      { meta },
+    );
+    animalId = animal.id;
+  });
+
+  afterAll(async () => {
+    await broker.stop();
+  });
+
+  it('owner cannot move a record to another species or change its stock fields', async () => {
+    const updated: { species: number; type: string; numberOfAnimals: number } = await broker.call(
+      'records.update',
+      {
+        id: recordId,
+        species: otherSpeciesId,
+        type: 'DEATH',
+        numberOfAnimals: 1000,
+        note: 'edited',
+      },
+      { meta: userMeta({ userId: OWNER }) },
+    );
+
+    expect(updated.species).toBe(ownSpeciesId);
+    expect(updated.type).toBe('ACQUIREMENT');
+    expect(updated.numberOfAnimals).toBe(5);
+    expect((await knex('species').where({ id: otherSpeciesId }).first('amount')).amount).toBeNull();
+  });
+
+  it('owner cannot change species amount, permit or accounting type', async () => {
+    const updated: { amount: number; type: string } = await broker.call(
+      'species.update',
+      { id: ownSpeciesId, amount: 1000000, type: 'INDIVIDUAL', permit: 9999 },
+      { meta: userMeta({ userId: OWNER }) },
+    );
+
+    expect(updated.amount).toBe(5);
+    expect(updated.type).toBe('GROUP');
+  });
+
+  it('owner cannot move an animal to another species', async () => {
+    const updated: { species: number } = await broker.call(
+      'animals.update',
+      { id: animalId, species: otherSpeciesId },
+      { meta: userMeta({ userId: OWNER }) },
+    );
+
+    expect(updated.species).not.toBe(otherSpeciesId);
+  });
+
+  it('admin reassigning a record recalculates both species', async () => {
+    await broker.call(
+      'records.update',
+      { id: recordId, species: otherSpeciesId },
+      { meta: adminMeta() },
+    );
+
+    expect((await knex('species').where({ id: ownSpeciesId }).first('amount')).amount).toBe(0);
+    expect((await knex('species').where({ id: otherSpeciesId }).first('amount')).amount).toBe(5);
+  });
+});
+
+// Bendras knex pool'as uždaromas vieną kartą, po abiejų describe blokų.
+afterAll(async () => {
+  await knex.destroy();
 });

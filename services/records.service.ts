@@ -238,6 +238,16 @@ export type Record<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: [
+      'species',
+      'animal',
+      'fosteredAnimal',
+      'permit',
+      'speciesClassifier',
+      'type',
+      'numberOfAnimals',
+    ],
     defaultPopulates: ['markingType'],
   },
   hooks: {
@@ -253,7 +263,8 @@ export type Record<
       remove: ['beforeMutate'],
     },
     after: {
-      create: ['afterCreate', 'recalculateSpeciesAmount'],
+      // Perskaičiavimas pirmas: laiško siuntimo klaida neturi palikti pasenusio kiekio.
+      create: ['recalculateSpeciesAmount', 'afterCreate'],
       update: ['recalculateSpeciesAmount'],
       remove: ['recalculateSpeciesAmount'],
     },
@@ -446,14 +457,21 @@ export default class RecordsService extends moleculer.Service {
     }
   }
 
-  // `remove` grąžina tik id, todėl įrašas imamas iš `beforeMutate` įsiminto objekto.
+  // Perskaičiuojama ir ankstesnė (`beforeMutate` įsiminta), ir dabartinė įrašo rūšis —
+  // administratoriui perkėlus įrašą kitai rūšiai, abi turi teisingą kiekį.
+  // `remove` grąžina tik id, todėl pašalintas įrašas imamas iš `ctx.locals.entity`.
   @Method
   async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Record | number) {
-    const record: Partial<Record> | undefined =
-      typeof result === 'object' ? result : ctx.locals.entity;
-    const speciesId = await this.resolveSpeciesIdForRecord(ctx, record);
-    if (speciesId) {
-      await ctx.call('species.recalculateAmount', { id: speciesId });
+    const previous: Partial<Record> | undefined = ctx.locals.entity;
+    const current: Partial<Record> | undefined = typeof result === 'object' ? result : previous;
+    const speciesIds = new Set(
+      [
+        await this.resolveSpeciesIdForRecord(ctx, previous),
+        await this.resolveSpeciesIdForRecord(ctx, current),
+      ].filter((id): id is number => !!id),
+    );
+    for (const id of speciesIds) {
+      await ctx.call('species.recalculateAmount', { id });
     }
     return result;
   }

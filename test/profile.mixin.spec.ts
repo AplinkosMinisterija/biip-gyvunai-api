@@ -190,3 +190,50 @@ describe('profile.mixin beforeMutate ownership', () => {
     ).rejects.toThrow('EntityNotFound');
   });
 });
+
+describe('profile.mixin beforeMutate frozen fields', () => {
+  const entity = { id: 7, tenant: 3, user: 5, species: 11, amount: 4 };
+
+  const mutateService = (userImmutableFields?: string[]) => ({
+    ...createService(),
+    settings: { ...createService().settings, userImmutableFields },
+    resolveEntities: jest.fn().mockResolvedValue(entity),
+  });
+
+  const userCtx = (params: any) => ({
+    params,
+    meta: { authUser: { type: AuthUserRole.USER }, user: { id: 5 } },
+    locals: {},
+  });
+
+  it('keeps service-declared fields at their stored value for non-admins', async () => {
+    const service = mutateService(['species', 'amount']);
+    const ctx = await service.beforeMutate(
+      userCtx({ id: 7, species: 99, amount: 1000, note: 'x' }) as any,
+    );
+
+    expect(ctx.params).toEqual({ id: 7, species: 11, amount: 4, note: 'x' });
+  });
+
+  it('lets admins change service-declared fields', async () => {
+    const service = mutateService(['species']);
+    const ctx = await service.beforeMutate({
+      params: { id: 7, species: 99 },
+      meta: { authUser: { type: AuthUserRole.ADMIN } },
+      locals: {},
+    } as any);
+
+    expect(ctx.params.species).toBe(99);
+  });
+
+  it('does not touch params of an internal call without a user context', async () => {
+    const service = mutateService(['species']);
+    const ctx = await service.beforeMutate({
+      params: { id: 7, species: 99, tenant: 1 },
+      meta: {},
+      locals: {},
+    } as any);
+
+    expect(ctx.params).toEqual({ id: 7, species: 99, tenant: 1 });
+  });
+});
