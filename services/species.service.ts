@@ -21,9 +21,10 @@ import {
   RestrictionType,
   Table,
   handleFormatResponse,
+  isAdmin,
 } from '../types';
 import { Animal } from './animals.service';
-import { AuthUserRole, UserAuthMeta } from './api.service';
+import { UserAuthMeta } from './api.service';
 import { Permit } from './permits.service';
 import { Record, RecordType } from './records.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
@@ -311,7 +312,14 @@ export default class SpeciesService extends moleculer.Service {
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
     const profile = ctx.meta.profile;
     const userId = ctx.meta.user.id;
-    if (ctx.params.type === PossesionType.WITH_PERMIT) {
+    if (ctx.params.possessionType === PossesionType.WITH_PERMIT) {
+      if (!ctx.params.permit) {
+        throw new moleculer.Errors.MoleculerClientError(
+          'Permit is required',
+          422,
+          'INVALID_PERMIT',
+        );
+      }
       const existingPermit: Permit = await ctx.call('permits.findOne', {
         query: {
           id: ctx.params.permit,
@@ -320,15 +328,11 @@ export default class SpeciesService extends moleculer.Service {
       if (!existingPermit) {
         throw new moleculer.Errors.MoleculerClientError('Permit not found', 422, 'INVALID_PERMIT');
       }
-      if (
-        ![AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
-          (role) => role === ctx.meta.authUser.type,
-        )
-      ) {
-        const isTenantPermit = !!profile && existingPermit.tenant == profile;
-        const isUserPermit = !profile && existingPermit.users.includes(userId);
+      if (!isAdmin(ctx)) {
+        const isTenantPermit = !!profile && Number(existingPermit.tenant) === Number(profile);
+        const isUserPermit = !profile && (existingPermit.users ?? []).includes(userId);
         if (!isTenantPermit && !isUserPermit) {
-          throw new moleculer.Errors.MoleculerClientError(`Invalid permit`, 422, 'INVALID_PERMIT');
+          throw new moleculer.Errors.MoleculerClientError('Invalid permit', 422, 'INVALID_PERMIT');
         }
       }
       ctx.params.permitData = existingPermit;

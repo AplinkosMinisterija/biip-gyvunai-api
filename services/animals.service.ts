@@ -14,11 +14,12 @@ import {
   FieldHookCallback,
   Gender,
   Table,
+  isAdmin,
 } from '../types';
-import { AuthUserRole, UserAuthMeta } from './api.service';
+import { UserAuthMeta } from './api.service';
 import { Permit } from './permits.service';
 import { Record, RecordType } from './records.service';
-import { PossesionType, Species } from './species.service';
+import { Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
@@ -289,24 +290,21 @@ export default class AnimalsService extends moleculer.Service {
 
     const profile = ctx.meta.profile;
     const userId = ctx.meta.user.id;
+    const permit = existingSpecies.permit;
+    const permitUsers: number[] = permit?.users ?? [];
 
     ctx.params.speciesClassifier = existingSpecies.speciesClassifier;
-    ctx.params.permit = existingSpecies.permit?.id;
-    ctx.params.user = existingSpecies.permit?.users.find((u: any) => u === userId);
-    ctx.params.tenant = existingSpecies.permit?.tenant;
+    ctx.params.permit = permit?.id;
+    ctx.params.user = permitUsers.find((u) => u === userId);
+    ctx.params.tenant = permit?.tenant;
 
-    if (
-      ![AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some(
-        (role) => role === ctx.meta.authUser.type,
-      )
-    ) {
-      const isTenantPermit = !!profile && existingSpecies.permit?.tenant == profile;
-      const isUserPermit = !profile && existingSpecies.permit?.users.includes(userId);
-      if (
-        !isTenantPermit &&
-        !isUserPermit &&
-        existingSpecies.possessionType === PossesionType.WITH_PERMIT
-      ) {
+    if (!isAdmin(ctx)) {
+      // Leidimo rūšies savininkas — leidimo turėtojas; rūšies be leidimo — jos kūrėjas.
+      const ownerTenant = permit ? permit.tenant : existingSpecies.tenant;
+      const ownerUsers = permit ? permitUsers : [existingSpecies.user];
+      const isTenantOwner = !!profile && Number(ownerTenant) === Number(profile);
+      const isUserOwner = !profile && ownerUsers.includes(userId);
+      if (!isTenantOwner && !isUserOwner) {
         throw new moleculer.Errors.MoleculerClientError('Invalid permit', 422, 'INVALID_PERMIT');
       }
     }
