@@ -206,6 +206,7 @@ export type Animal<
   actions: {
     create: {
       rest: null,
+      visibility: 'public',
     },
   },
 })

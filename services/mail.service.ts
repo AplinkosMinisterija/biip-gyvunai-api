@@ -37,6 +37,7 @@ const client = new ServerClient(process.env.POSTMARK_KEY);
 })
 export default class FishAgesService extends moleculer.Service {
   @Action({
+    visibility: 'public',
     params: {
       record: 'object',
       species: 'object',

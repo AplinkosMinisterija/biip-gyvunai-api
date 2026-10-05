@@ -155,6 +155,7 @@ export type TenantUser<
 })
 export default class TenantUsersService extends moleculer.Service {
   @Action({
+    rest: 'GET /my',
     auth: RestrictionType.USER,
   })
   my(ctx: Context<null, UserAuthMeta>) {
@@ -266,7 +267,7 @@ export default class TenantUsersService extends moleculer.Service {
     });
   }
 
-  @Action()
+  @Action({ visibility: 'public' })
   async getProfiles(ctx: Context<{}, UserAuthMeta>) {
     const { user } = ctx.meta;
     if ([AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].some((r) => r === ctx.meta.authUser.type))
@@ -324,6 +325,7 @@ export default class TenantUsersService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       authGroup: 'any',
       userId: {

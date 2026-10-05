@@ -92,6 +92,7 @@ export interface Tenant {
     get: {},
     create: {
       rest: null,
+      visibility: 'public',
     },
     update: {},
     remove: {},
@@ -233,6 +234,7 @@ export default class TenantsService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       authGroup: 'any',
       email: {
@@ -294,7 +296,7 @@ export default class TenantsService extends moleculer.Service {
     });
   }
 
-  @Action()
+  @Action({ visibility: 'public' })
   createPermissive(ctx: Context) {
     return this.createEntity(ctx, ctx.params, {
       permissive: true,

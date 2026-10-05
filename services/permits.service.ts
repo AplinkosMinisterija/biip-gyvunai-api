@@ -236,12 +236,22 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   actions: {
     create: {
       rest: null,
+      visibility: 'public',
     },
     remove: {
       rest: null,
+      visibility: 'public',
     },
     update: {
       rest: null,
+      visibility: 'public',
+    },
+    // moleculer-postgis vidiniai veiksmai
+    _getFeatureCollectionFromGeom: {
+      visibility: 'public',
+    },
+    _getGeometryArea: {
+      visibility: 'public',
     },
   },
   hooks: {
@@ -301,7 +311,7 @@ export default class PermitsService extends moleculer.Service {
         optional: true,
       },
     },
-    types: [RestrictionType.ADMIN],
+    auth: RestrictionType.ADMIN,
   })
   async removePermit(
     ctx: Context<
@@ -344,7 +354,6 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: ['POST /', 'PATCH /:id'],
-    types: [RestrictionType.ADMIN],
   })
   async createOrUpdate(
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,

@@ -227,6 +227,7 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
   actions: {
     create: {
       rest: null,
+      visibility: 'public',
     },
   },
   hooks: {

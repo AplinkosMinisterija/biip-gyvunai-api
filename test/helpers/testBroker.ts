@@ -1,5 +1,5 @@
 import Knex from 'knex';
-import { ServiceBroker } from 'moleculer';
+import { ActionSchema, ServiceBroker } from 'moleculer';
 import path from 'path';
 import knexConfig from '../../knexfile';
 import { AuthUserRole, UserAuthMeta } from '../../services/api.service';
@@ -20,6 +20,10 @@ const REAL_SERVICES = [
   'tenants',
   'tenantUsers',
   'fosteredAnimals',
+  'statistics',
+  'locations',
+  'public.permitSpecies',
+  'public.permitsByCadastralIds',
 ];
 
 const DOMAIN_TABLES = [
@@ -46,9 +50,10 @@ export const createTestBroker = async (): Promise<ServiceBroker> => {
     broker.loadService(path.join(__dirname, `../../services/${name}.service.ts`));
   }
 
-  broker.createService({ name: 'auth', actions: { getSeedData: () => [] } });
-  broker.createService({ name: 'mail', actions: { sendRecordEmail: () => true } });
-  broker.createService({ name: 'minio', actions: { uploadFile: () => ({}) } });
+  const internal = <T>(handler: () => T): ActionSchema => ({ visibility: 'public', handler });
+  broker.createService({ name: 'auth', actions: { getSeedData: internal(() => []) } });
+  broker.createService({ name: 'mail', actions: { sendRecordEmail: internal(() => true) } });
+  broker.createService({ name: 'minio', actions: { uploadFile: internal(() => ({})) } });
 
   await broker.start();
   return broker;

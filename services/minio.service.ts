@@ -33,6 +33,7 @@ export const BUCKET_NAME = () => process.env.MINIO_BUCKET || 'gyvunai';
 })
 export default class MinioService extends Moleculer.Service {
   @Action({
+    visibility: 'public',
     params: {
       bucketName: {
         type: 'string',
@@ -194,6 +195,7 @@ export default class MinioService extends Moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       objectName: 'string',
       bucketName: {
@@ -232,6 +234,7 @@ export default class MinioService extends Moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       path: 'string',
     },

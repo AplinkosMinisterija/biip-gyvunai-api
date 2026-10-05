@@ -270,6 +270,7 @@ export type Record<
   actions: {
     create: {
       rest: null,
+      visibility: 'public',
     },
   },
 })

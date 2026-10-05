@@ -152,6 +152,7 @@ export interface User {
     get: {},
     create: {
       rest: null,
+      visibility: 'public',
     },
     update: {},
     remove: {},
@@ -242,6 +243,7 @@ export default class UsersService extends moleculer.Service {
     return me;
   }
   @Action({
+    visibility: 'public',
     params: {
       tenantId: 'string|optional',
     },
@@ -303,6 +305,7 @@ export default class UsersService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     auth: RestrictionType.DEFAULT,
     params: {
       tenants: {
@@ -436,6 +439,7 @@ export default class UsersService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       authUser: 'any',
       update: {
@@ -513,6 +517,7 @@ export default class UsersService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       authUser: 'any',
     },
@@ -529,6 +534,7 @@ export default class UsersService extends moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       authUser: 'any',
       authUserGroups: 'array',
