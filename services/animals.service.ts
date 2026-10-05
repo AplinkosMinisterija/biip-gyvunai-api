@@ -197,6 +197,9 @@ export type Animal<
       count: 'beforeSelect',
       get: 'beforeSelect',
       all: 'beforeSelect',
+      update: 'beforeMutate',
+      replace: 'beforeMutate',
+      remove: 'beforeMutate',
     },
   },
   actions: {

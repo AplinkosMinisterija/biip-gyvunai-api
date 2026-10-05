@@ -228,6 +228,9 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
       count: 'beforeSelect',
       get: 'beforeSelect',
       all: 'beforeSelect',
+      update: 'beforeMutate',
+      replace: 'beforeMutate',
+      remove: 'beforeMutate',
     },
   },
   actions: {

@@ -259,6 +259,9 @@ export type Record<
       count: ['beforeSelect', 'handleFilters'],
       get: ['beforeSelect', 'handleFilters'],
       all: ['beforeSelect', 'handleFilters'],
+      update: ['beforeMutate'],
+      replace: ['beforeMutate'],
+      remove: ['beforeMutate'],
     },
     after: {
       create: ['afterCreate'],
