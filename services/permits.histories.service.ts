@@ -33,6 +33,7 @@ enum DeleteReasons {
     DbConnection({
       collection: 'permitHistories',
       rest: false,
+      actionVisibility: 'public',
     }),
   ],
 

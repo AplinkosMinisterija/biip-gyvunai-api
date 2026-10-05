@@ -227,6 +227,7 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
   actions: {
     create: {
       rest: null,
+      visibility: 'public',
     },
   },
   hooks: {
@@ -237,6 +238,9 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
       count: 'beforeSelect',
       get: 'beforeSelect',
       all: 'beforeSelect',
+      update: 'beforeMutate',
+      replace: 'beforeMutate',
+      remove: 'beforeMutate',
     },
   },
 })
@@ -285,7 +289,6 @@ export default class FosteredAnimalsService extends moleculer.Service {
       folder: 'fosteredAnimals',
     });
   }
-
 
   @Action({
     rest: 'POST /',

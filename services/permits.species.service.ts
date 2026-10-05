@@ -37,6 +37,7 @@ export type PermitSpecies<
     DbConnection({
       collection: 'permitSpecies',
       rest: false,
+      actionVisibility: 'public',
     }),
   ],
   settings: {
@@ -76,7 +77,7 @@ export type PermitSpecies<
   },
 })
 export default class PermitSpeciesService extends moleculer.Service {
-  @Action()
+  @Action({ visibility: 'public' })
   async createOrUpdate(
     ctx: Context<{ id: number; species: number; family: number; permit: number }>,
   ) {
