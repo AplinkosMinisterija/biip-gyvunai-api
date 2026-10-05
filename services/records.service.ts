@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { AMOUNT_RECORD_TYPES, OUTGOING_RECORD_TYPES } from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -21,7 +22,7 @@ import { AuthUserRole, UserAuthMeta } from './api.service';
 import { FosteredAnimal } from './fosteredAnimals.service';
 import { MarkingTypeClassifier } from './markingTypeClassifiers.service';
 import { Permit } from './permits.service';
-import { Species } from './species.service';
+import { AccountingType, Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
@@ -252,7 +253,9 @@ export type Record<
       remove: ['beforeMutate'],
     },
     after: {
-      create: ['afterCreate'],
+      create: ['afterCreate', 'recalculateSpeciesAmount'],
+      update: ['recalculateSpeciesAmount'],
+      remove: ['recalculateSpeciesAmount'],
     },
   },
   actions: {
@@ -279,7 +282,7 @@ export default class RecordsService extends moleculer.Service {
         optional: true,
       },
       date: 'string|optional',
-      numberOfAnimals: 'number|convert|optional',
+      numberOfAnimals: 'number|convert|integer|min:0|optional',
       note: 'string|optional',
       deathReason: 'string|optional',
       acquiredFrom: 'object|optional',
@@ -340,15 +343,7 @@ export default class RecordsService extends moleculer.Service {
       entityUser = species.user;
       ctx.params.permit = species.permit;
       ctx.params.speciesClassifier = species.speciesClassifier;
-      if (ctx.params.type === RecordType.DEATH || ctx.params.type === RecordType.SALE) {
-        if (species.amount - ctx.params.numberOfAnimals < 0) {
-          throw new moleculer.Errors.MoleculerClientError(
-            'Invalid number of animals',
-            422,
-            'INVALID_NUMBER_OF_ANIMALS',
-          );
-        }
-      }
+      this.validateNumberOfAnimals(species, ctx.params.type, ctx.params.numberOfAnimals);
     }
 
     if (ctx.params.fosteredAnimal) {
@@ -430,6 +425,55 @@ export default class RecordsService extends moleculer.Service {
         await ctx.call('mail.sendRecordEmail', { record: data, species });
       }
     }
+    return data;
+  }
+
+  // Grupinėje apskaitoje kiekį keičiantis įrašas privalo turėti kiekį ir negali nuvesti
+  // likučio į minusą. Individualioje apskaitoje kiekis seka iš pačių gyvūnų.
+  @Method
+  validateNumberOfAnimals(species: Species, type: RecordType, numberOfAnimals?: number) {
+    const isGroup = species.type !== AccountingType.INDIVIDUAL;
+    if (!isGroup || !AMOUNT_RECORD_TYPES.includes(type)) return;
+
+    const count = numberOfAnimals ?? 0;
+    const exceedsStock = OUTGOING_RECORD_TYPES.includes(type) && (species.amount ?? 0) - count < 0;
+    if (count < 1 || exceedsStock) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Invalid number of animals',
+        422,
+        'INVALID_NUMBER_OF_ANIMALS',
+      );
+    }
+  }
+
+  // `remove` grąžina tik id, todėl įrašas imamas iš `beforeMutate` įsiminto objekto.
+  @Method
+  async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Record | number) {
+    const record: Partial<Record> | undefined =
+      typeof result === 'object' ? result : ctx.locals.entity;
+    const speciesId = await this.resolveSpeciesIdForRecord(ctx, record);
+    if (speciesId) {
+      await ctx.call('species.recalculateAmount', { id: speciesId });
+    }
+    return result;
+  }
+
+  // Gyvūno įrašai `species` lauko dažnai neturi — rūšis imama iš paties gyvūno.
+  @Method
+  async resolveSpeciesIdForRecord(
+    ctx: Context<unknown, UserAuthMeta>,
+    record?: Partial<Record>,
+  ): Promise<number | undefined> {
+    if (!record) return undefined;
+    if (record.species) return record.species;
+    if (!record.animal) return undefined;
+
+    const animal: Pick<Animal, 'species'> | null = await ctx.call('animals.resolve', {
+      id: record.animal,
+      fields: ['species'],
+    });
+
+    return animal?.species;
   }
 
   @Method

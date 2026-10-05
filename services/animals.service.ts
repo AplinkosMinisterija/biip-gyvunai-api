@@ -202,6 +202,11 @@ export type Animal<
       replace: 'beforeMutate',
       remove: 'beforeMutate',
     },
+    after: {
+      create: ['recalculateSpeciesAmount'],
+      update: ['recalculateSpeciesAmount'],
+      remove: ['recalculateSpeciesAmount'],
+    },
   },
   actions: {
     create: {
@@ -230,6 +235,7 @@ export default class AnimalsService extends moleculer.Service {
   })
   async newAnimal(ctx: Context<any>) {
     const animal = await this.createEntity(ctx);
+    await ctx.call('species.recalculateAmount', { id: animal.species });
     if (ctx.params.birthDate) {
       await ctx.call('records.newRecord', {
         type: RecordType.BIRTH,
@@ -273,7 +279,7 @@ export default class AnimalsService extends moleculer.Service {
       });
     }
 
-    return this.findEntity(ctx, { id: animal.id });
+    return this.resolveEntities(ctx, { id: animal.id });
   }
 
   @Method
@@ -310,5 +316,15 @@ export default class AnimalsService extends moleculer.Service {
       }
     }
     return ctx;
+  }
+
+  // `remove` grąžina tik id, todėl rūšis imama iš `beforeMutate` įsiminto gyvūno.
+  @Method
+  async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Animal | number) {
+    const speciesId = (typeof result === 'object' && result?.species) || ctx.locals.entity?.species;
+    if (speciesId) {
+      await ctx.call('species.recalculateAmount', { id: speciesId });
+    }
+    return result;
   }
 }
