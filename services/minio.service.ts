@@ -1,6 +1,6 @@
 'use strict';
 
-import Moleculer, { Context } from 'moleculer';
+import Moleculer, { ActionSchema, Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 // @ts-ignore
 import MinioMixin from 'moleculer-minio';
@@ -20,6 +20,36 @@ import { UserAuthMeta } from './api.service';
 
 export const BUCKET_NAME = () => process.env.MINIO_BUCKET || 'gyvunai';
 
+// moleculer-minio veiksmai (bucket'ų ir objektų valdymas) skirti tik vidiniams kvietimams:
+// API gateway (`mappingPolicy: 'all'`) kitaip juos atvertų bet kuriam prisijungusiam naudotojui.
+const MINIO_MIXIN_ACTIONS = [
+  'makeBucket',
+  'listBuckets',
+  'bucketExists',
+  'removeBucket',
+  'listObjects',
+  'listObjectsV2',
+  'listIncompleteUploads',
+  'getObject',
+  'getPartialObject',
+  'fGetObject',
+  'putObject',
+  'fPutObject',
+  'copyObject',
+  'statObject',
+  'removeObject',
+  'removeObjects',
+  'removeIncompleteUpload',
+  'presignedUrl',
+  'presignedGetObject',
+  'presignedPutObject',
+  'presignedPostPolicy',
+];
+
+const hiddenMinioActions = MINIO_MIXIN_ACTIONS.reduce<
+  Record<string, Pick<ActionSchema, 'visibility'>>
+>((actions, name) => ({ ...actions, [name]: { visibility: 'public' } }), {});
+
 @Service({
   name: 'minio',
   mixins: [MinioMixin],
@@ -30,6 +60,7 @@ export const BUCKET_NAME = () => process.env.MINIO_BUCKET || 'gyvunai';
     accessKey: process.env.MINIO_ACCESSKEY,
     secretKey: process.env.MINIO_SECRETKEY,
   },
+  actions: hiddenMinioActions,
 })
 export default class MinioService extends Moleculer.Service {
   @Action({
@@ -60,6 +91,7 @@ export default class MinioService extends Moleculer.Service {
   }
 
   @Action({
+    visibility: 'public',
     params: {
       folder: 'string',
       types: {

@@ -115,17 +115,23 @@ export default {
     async beforeMutate(
       ctx: Context<Record<string, unknown> & { id: number | string }, UserAuthMeta>,
     ) {
-      const accessQuery = this.buildAccessQuery(ctx.meta) || {};
+      const accessQuery = this.buildAccessQuery(ctx.meta);
 
       const entity = await this.resolveEntities(
         ctx,
-        { id: ctx.params.id, query: accessQuery },
+        { id: ctx.params.id, query: accessQuery || {} },
         { throwIfNotExist: true },
       );
 
-      if (!isAdminMeta(ctx.meta)) {
-        // Savininkystės laukus gali keisti tik administratorius.
-        for (const field of OWNERSHIP_FIELDS) {
+      // Apribotam naudotojui savininkystės ir serviso nurodyti (`settings.userImmutableFields`)
+      // ryšio laukai lieka tokie, kokie saugomi — kitaip savo įrašą būtų galima perkelti
+      // į svetimą rūšį ar leidimą, o rūšiai įrašyti bet kokį `amount`.
+      if (accessQuery) {
+        const frozenFields: readonly string[] = [
+          ...OWNERSHIP_FIELDS,
+          ...(this.settings?.userImmutableFields ?? []),
+        ];
+        for (const field of frozenFields) {
           if (ctx.params[field] === undefined) continue;
           if (entity[field] == null) delete ctx.params[field];
           else ctx.params[field] = entity[field];

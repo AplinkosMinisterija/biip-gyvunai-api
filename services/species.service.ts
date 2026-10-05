@@ -1,11 +1,16 @@
 'use strict';
 
 import moleculer, { Context, RestSchema } from 'moleculer';
-import { Action, Event, Method, Service } from 'moleculer-decorators';
+import { Action, Method, Service } from 'moleculer-decorators';
 
 import { find } from 'lodash';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import {
+  OUTGOING_RECORD_TYPES,
+  calculateGroupAmount,
+  calculateIndividualAmount,
+} from '../modules/speciesAmount';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -16,7 +21,6 @@ import {
   CommonFields,
   CommonPopulates,
   DeepQuery,
-  EntityChangedParams,
   GroupByType,
   RestrictionType,
   Table,
@@ -26,7 +30,7 @@ import {
 import { Animal } from './animals.service';
 import { UserAuthMeta } from './api.service';
 import { Permit } from './permits.service';
-import { Record, RecordType } from './records.service';
+import { Record } from './records.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
@@ -219,6 +223,8 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: ['permit', 'amount', 'type', 'possessionType'],
     defaultPopulates: [],
   },
   hooks: {
@@ -425,60 +431,52 @@ export default class SpeciesService extends moleculer.Service {
       pageSize,
     });
   }
-  @Event()
-  async 'records.created'(ctx: Context<EntityChangedParams<Record>>) {
-    const record = ctx.params.data as Record;
-    const speciesId = record.species;
-    const animaId = record.animal;
-    if (speciesId) {
-      const species: Species = await ctx.call('species.get', { id: speciesId });
-      if (!species) {
-        throw new moleculer.Errors.MoleculerClientError(
-          'Incorrect species',
-          422,
-          'INCORRECT_SPECIES',
-        );
-      }
-      let amount: number = 0;
-      if (animaId && species.type === AccountingType.INDIVIDUAL) {
-        const animal: Animal = await ctx.call('animals.get', { id: animaId });
-        if (!animal) {
-          throw new moleculer.Errors.MoleculerClientError(
-            'Incorrect animal',
-            422,
-            'INCORRECT_ANIMAL',
-          );
-        }
-        const animalsRegistered: Animal[] = await ctx.call('animals.find', {
-          query: {
-            species: speciesId,
-          },
-        });
-        amount = animalsRegistered.length;
-        for (const a of animalsRegistered) {
-          if (!!a.saleRecord || !!a.deathRecord) {
-            amount = amount - 1;
-          }
-        }
-      } else if (speciesId && species.type === AccountingType.GROUP) {
-        const records: Record[] =
-          (await ctx.call('records.find', {
-            query: {
-              species: speciesId,
-            },
-          })) || [];
-        for (const r of records) {
-          if (
-            [RecordType.BIRTH, RecordType.ACQUIREMENT].some((type: RecordType) => type === r.type)
-          ) {
-            amount += r.numberOfAnimals;
-          }
-          if ([RecordType.DEATH, RecordType.SALE].some((type: RecordType) => type === r.type)) {
-            amount -= r.numberOfAnimals;
-          }
-        }
-      }
-      this.updateEntity(ctx, { id: speciesId, amount });
-    }
+  // Vidinis veiksmas (ne HTTP): kviečiamas iš records/animals hook'ų po kiekvieno pakeitimo.
+  @Action({
+    visibility: 'public',
+    params: {
+      id: 'number|convert',
+    },
+  })
+  async recalculateAmount(ctx: Context<{ id: number }>) {
+    const species: Species = await this.resolveEntities(ctx, { id: ctx.params.id });
+    if (!species) return null;
+
+    const amount =
+      species.type === AccountingType.INDIVIDUAL
+        ? await this.countIndividualAnimals(species.id)
+        : await this.sumGroupRecords(species.id);
+
+    return this.updateEntity(ctx, { id: species.id, amount });
+  }
+
+  // Skaičiuojama be naudotojo konteksto (`this.broker.call`), kad ProfileMixin
+  // neapribotų įrašų iki kuriančio naudotojo — leidimu dalijasi keli naudotojai.
+  @Method
+  async sumGroupRecords(speciesId: number): Promise<number> {
+    const records: Pick<Record, 'type' | 'numberOfAnimals'>[] = await this.broker.call(
+      'records.find',
+      { query: { species: speciesId }, fields: ['type', 'numberOfAnimals'] },
+    );
+
+    return calculateGroupAmount(records);
+  }
+
+  @Method
+  async countIndividualAnimals(speciesId: number): Promise<number> {
+    const animals: Pick<Animal, 'id'>[] = await this.broker.call('animals.find', {
+      query: { species: speciesId },
+      fields: ['id'],
+    });
+    const animalIds = animals.map((animal) => animal.id);
+    if (!animalIds.length) return 0;
+
+    // Gyvūno įrašai ne visada turi `species`, todėl mažinantys įrašai ieškomi pagal gyvūną.
+    const outgoingRecords: Pick<Record, 'animal'>[] = await this.broker.call('records.find', {
+      query: { animal: { $in: animalIds }, type: { $in: OUTGOING_RECORD_TYPES } },
+      fields: ['animal'],
+    });
+
+    return calculateIndividualAmount(animalIds, outgoingRecords);
   }
 }

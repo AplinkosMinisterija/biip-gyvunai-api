@@ -189,6 +189,8 @@ export type Animal<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: ['species', 'permit', 'speciesClassifier'],
   },
   hooks: {
     before: {
@@ -201,6 +203,11 @@ export type Animal<
       update: 'beforeMutate',
       replace: 'beforeMutate',
       remove: 'beforeMutate',
+    },
+    after: {
+      create: ['recalculateSpeciesAmount'],
+      update: ['recalculateSpeciesAmount'],
+      remove: ['recalculateSpeciesAmount'],
     },
   },
   actions: {
@@ -230,6 +237,7 @@ export default class AnimalsService extends moleculer.Service {
   })
   async newAnimal(ctx: Context<any>) {
     const animal = await this.createEntity(ctx);
+    await ctx.call('species.recalculateAmount', { id: animal.species });
     if (ctx.params.birthDate) {
       await ctx.call('records.newRecord', {
         type: RecordType.BIRTH,
@@ -273,7 +281,7 @@ export default class AnimalsService extends moleculer.Service {
       });
     }
 
-    return this.findEntity(ctx, { id: animal.id });
+    return this.resolveEntities(ctx, { id: animal.id });
   }
 
   @Method
@@ -310,5 +318,21 @@ export default class AnimalsService extends moleculer.Service {
       }
     }
     return ctx;
+  }
+
+  // Perskaičiuojama ir ankstesnė (`beforeMutate` įsiminta), ir dabartinė gyvūno rūšis —
+  // administratoriui perkėlus gyvūną kitai rūšiai, abi turi teisingą kiekį.
+  // `remove` grąžina tik id, todėl pašalintas gyvūnas imamas iš `ctx.locals.entity`.
+  @Method
+  async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Animal | number) {
+    const previousSpecies: number | undefined = ctx.locals.entity?.species;
+    const currentSpecies = typeof result === 'object' ? result?.species : previousSpecies;
+    const speciesIds = new Set(
+      [previousSpecies, currentSpecies].filter((id): id is number => !!id),
+    );
+    for (const id of speciesIds) {
+      await ctx.call('species.recalculateAmount', { id });
+    }
+    return result;
   }
 }

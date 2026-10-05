@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { AMOUNT_RECORD_TYPES, OUTGOING_RECORD_TYPES } from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -13,6 +14,7 @@ import {
   CommonFields,
   CommonPopulates,
   Gender,
+  RecordType,
   Table,
 } from '../types';
 import { Animal } from './animals.service';
@@ -20,27 +22,14 @@ import { AuthUserRole, UserAuthMeta } from './api.service';
 import { FosteredAnimal } from './fosteredAnimals.service';
 import { MarkingTypeClassifier } from './markingTypeClassifiers.service';
 import { Permit } from './permits.service';
-import { Species } from './species.service';
+import { AccountingType, Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
-export enum RecordType {
-  ACQUIREMENT = 'ACQUIREMENT',
-  BIRTH = 'BIRTH',
-  DEATH = 'DEATH',
-  VACCINATION = 'VACCINATION',
-  SALE = 'SALE',
-  TREATMENT = 'TREATMENT',
-  MARKING = 'MARKING',
-  PICK_UP_FROM_NATURE = 'PICK_UP_FROM_NATURE',
-  OBTAINMENT_OF_FOSTERED_ANIMAL = 'OBTAINMENT_OF_FOSTERED_ANIMAL',
-  RELEASE = 'RELEASE',
-  TRANSFER = 'TRANSFER',
-  GENDER_CONFIRMATION = 'GENDER_CONFIRMATION',
-  CERTIFICATE_NO = 'CERTIFICATE_NO',
-  OTHER = 'OTHER',
-}
+// RecordType gyvena types/constants.ts (naudoja ir modules/speciesAmount.ts) — čia re-eksportuojamas,
+// kad esami importai iš records.service nesikeistų.
+export { RecordType };
 
 export enum DeathReason {
   EUTHANIZED = 'EUTHANIZED',
@@ -249,6 +238,16 @@ export type Record<
       ...COMMON_SCOPES,
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
+    userImmutableFields: [
+      'species',
+      'animal',
+      'fosteredAnimal',
+      'permit',
+      'speciesClassifier',
+      'type',
+      'numberOfAnimals',
+    ],
     defaultPopulates: ['markingType'],
   },
   hooks: {
@@ -264,7 +263,10 @@ export type Record<
       remove: ['beforeMutate'],
     },
     after: {
-      create: ['afterCreate'],
+      // Perskaičiavimas pirmas: laiško siuntimo klaida neturi palikti pasenusio kiekio.
+      create: ['recalculateSpeciesAmount', 'afterCreate'],
+      update: ['recalculateSpeciesAmount'],
+      remove: ['recalculateSpeciesAmount'],
     },
   },
   actions: {
@@ -291,7 +293,7 @@ export default class RecordsService extends moleculer.Service {
         optional: true,
       },
       date: 'string|optional',
-      numberOfAnimals: 'number|convert|optional',
+      numberOfAnimals: 'number|convert|integer|min:0|optional',
       note: 'string|optional',
       deathReason: 'string|optional',
       acquiredFrom: 'object|optional',
@@ -352,15 +354,7 @@ export default class RecordsService extends moleculer.Service {
       entityUser = species.user;
       ctx.params.permit = species.permit;
       ctx.params.speciesClassifier = species.speciesClassifier;
-      if (ctx.params.type === RecordType.DEATH || ctx.params.type === RecordType.SALE) {
-        if (species.amount - ctx.params.numberOfAnimals < 0) {
-          throw new moleculer.Errors.MoleculerClientError(
-            'Invalid number of animals',
-            422,
-            'INVALID_NUMBER_OF_ANIMALS',
-          );
-        }
-      }
+      this.validateNumberOfAnimals(species, ctx.params.type, ctx.params.numberOfAnimals);
     }
 
     if (ctx.params.fosteredAnimal) {
@@ -442,6 +436,62 @@ export default class RecordsService extends moleculer.Service {
         await ctx.call('mail.sendRecordEmail', { record: data, species });
       }
     }
+    return data;
+  }
+
+  // Grupinėje apskaitoje kiekį keičiantis įrašas privalo turėti kiekį ir negali nuvesti
+  // likučio į minusą. Individualioje apskaitoje kiekis seka iš pačių gyvūnų.
+  @Method
+  validateNumberOfAnimals(species: Species, type: RecordType, numberOfAnimals?: number) {
+    const isGroup = species.type !== AccountingType.INDIVIDUAL;
+    if (!isGroup || !AMOUNT_RECORD_TYPES.includes(type)) return;
+
+    const count = numberOfAnimals ?? 0;
+    const exceedsStock = OUTGOING_RECORD_TYPES.includes(type) && (species.amount ?? 0) - count < 0;
+    if (count < 1 || exceedsStock) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Invalid number of animals',
+        422,
+        'INVALID_NUMBER_OF_ANIMALS',
+      );
+    }
+  }
+
+  // Perskaičiuojama ir ankstesnė (`beforeMutate` įsiminta), ir dabartinė įrašo rūšis —
+  // administratoriui perkėlus įrašą kitai rūšiai, abi turi teisingą kiekį.
+  // `remove` grąžina tik id, todėl pašalintas įrašas imamas iš `ctx.locals.entity`.
+  @Method
+  async recalculateSpeciesAmount(ctx: Context<unknown, UserAuthMeta>, result: Record | number) {
+    const previous: Partial<Record> | undefined = ctx.locals.entity;
+    const current: Partial<Record> | undefined = typeof result === 'object' ? result : previous;
+    const speciesIds = new Set(
+      [
+        await this.resolveSpeciesIdForRecord(ctx, previous),
+        await this.resolveSpeciesIdForRecord(ctx, current),
+      ].filter((id): id is number => !!id),
+    );
+    for (const id of speciesIds) {
+      await ctx.call('species.recalculateAmount', { id });
+    }
+    return result;
+  }
+
+  // Gyvūno įrašai `species` lauko dažnai neturi — rūšis imama iš paties gyvūno.
+  @Method
+  async resolveSpeciesIdForRecord(
+    ctx: Context<unknown, UserAuthMeta>,
+    record?: Partial<Record>,
+  ): Promise<number | undefined> {
+    if (!record) return undefined;
+    if (record.species) return record.species;
+    if (!record.animal) return undefined;
+
+    const animal: Pick<Animal, 'species'> | null = await ctx.call('animals.resolve', {
+      id: record.animal,
+      fields: ['species'],
+    });
+
+    return animal?.species;
   }
 
   @Method
