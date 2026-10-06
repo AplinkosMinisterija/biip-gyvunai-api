@@ -305,7 +305,6 @@ export default class UsersService extends moleculer.Service {
   }
 
   @Action({
-    visibility: 'public',
     auth: RestrictionType.DEFAULT,
     params: {
       tenants: {

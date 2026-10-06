@@ -33,6 +33,23 @@ describe('gateway exposure invariant', () => {
     expect(exposedWithoutAlias).toEqual([]);
   });
 
+  // Paslėptas veiksmas su REST aliasu = dingęs maršrutas (moleculer-web aliasų negeneruoja
+  // ne-published veiksmams). Taip buvo pamestas GET /users, kai dekoruotas list override'as
+  // (be rest, nes jį paveldi iš mixin'o) gavo visibility 'public'.
+  it('no action with a REST alias is hidden from the gateway', () => {
+    const actions = broker.registry.getActionList({ onlyLocal: true });
+
+    const hiddenWithAlias = actions
+      .filter(({ action }) => action.visibility && action.visibility !== 'published')
+      .filter(
+        ({ action }) => action.rest !== undefined && action.rest !== null && action.rest !== false,
+      )
+      .map(({ name }) => name)
+      .sort();
+
+    expect(hiddenWithAlias).toEqual([]);
+  });
+
   // minio startuoti testuose negalima (jungiasi prie MinIO), todėl tikrinama tik sujungta schema.
   it('minio service hides every mixin action without a REST alias', () => {
     const schemaBroker = new ServiceBroker({ logger: false });
