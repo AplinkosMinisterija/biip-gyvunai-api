@@ -8,8 +8,8 @@ import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
   PermitIdentity,
+  isMunicipalityAccepted,
   isPermitIdentityChanged,
-  isValidMunicipality,
 } from '../modules/permitValidation';
 import {
   COMMON_ACTION_PARAMS,
@@ -580,8 +580,8 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  validateMunicipality({ value }: FieldHookCallback) {
-    if (value === null || isValidMunicipality(value)) return true;
+  validateMunicipality({ value, entity }: FieldHookCallback) {
+    if (isMunicipalityAccepted(value, entity?.municipality)) return true;
 
     return 'Invalid municipality';
   }

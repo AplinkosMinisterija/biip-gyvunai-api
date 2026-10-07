@@ -1,4 +1,7 @@
-import { isPlainObject } from 'lodash';
+import { isEqual, isPlainObject } from 'lodash';
+import moment from 'moment-timezone';
+
+const TIMEZONE = 'Europe/Vilnius';
 
 export type PermitIdentity = {
   id?: number;
@@ -9,10 +12,11 @@ export type PermitIdentity = {
 
 type PermitSpeciesRow = { species?: number | null; family?: number | null };
 
+// Diena Vilniaus laiku, kaip ir unikalumo užklausoje (`formatDateFrom`/`formatDateTo`).
 const toDay = (date?: Date | string) => {
   if (!date) return undefined;
-  const parsed = new Date(date);
-  return Number.isNaN(parsed.getTime()) ? String(date) : parsed.toISOString().slice(0, 10);
+  const parsed = moment.utc(date);
+  return parsed.isValid() ? parsed.tz(TIMEZONE).format('YYYY-MM-DD') : String(date);
 };
 
 export const isPermitIdentityChanged = (current: PermitIdentity, updated: PermitIdentity) =>
@@ -30,6 +34,10 @@ export const isValidMunicipality = (value: unknown) => {
 
   return hasId && hasName;
 };
+
+// Nepakeista sena reikšmė praleidžiama, kad leidimai su netvarkinga savivaldybe liktų redaguojami.
+export const isMunicipalityAccepted = (value: unknown, stored?: unknown) =>
+  value === null || isValidMunicipality(value) || (stored !== undefined && isEqual(value, stored));
 
 // Leidimo eilutė be rūšies leidžia visą šeimą; su rūšimi — tik tą rūšį.
 export const isSpeciesAllowedByPermit = (
