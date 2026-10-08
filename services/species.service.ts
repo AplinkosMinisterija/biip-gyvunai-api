@@ -3,9 +3,9 @@
 import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 
-import { find } from 'lodash';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { isSpeciesAllowedByPermit } from '../modules/permitValidation';
 import {
   OUTGOING_RECORD_TYPES,
   calculateGroupAmount,
@@ -29,7 +29,8 @@ import {
 } from '../types';
 import { Animal } from './animals.service';
 import { UserAuthMeta } from './api.service';
-import { Permit } from './permits.service';
+import { Permit, PermitTypes } from './permits.service';
+import { PermitSpecies } from './permits.species.service';
 import { Record } from './records.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
@@ -290,29 +291,45 @@ export default class SpeciesService extends moleculer.Service {
     },
   })
   async newSpecies(ctx: Context<any>) {
-    if (ctx.params.type === PossesionType.WITH_PERMIT) {
-      const permit: Permit = ctx.params.permitData;
-      if (permit?.forest && !permit?.fencingOffDate) {
-        throw new moleculer.Errors.MoleculerClientError(
-          'No fencing off date',
-          422,
-          'NO_FENCING_OFF_DATE',
-        );
-      }
-      const correctSpecies = find(
-        permit.permitSpecies,
-        (s) => s.id === ctx.params.speciesClassifier,
-      );
-      const otherSpecies = find(permit.permitSpecies, (s) => !s.id);
-      if (!correctSpecies && !otherSpecies) {
-        throw new moleculer.Errors.MoleculerClientError(
-          'Incorrect species',
-          422,
-          'INCORRECT_SPECIES',
-        );
-      }
+    // Anksčiau buvo lyginamas `type` (INDIVIDUAL/GROUP) su WITH_PERMIT, todėl patikra niekada nevyko.
+    if (ctx.params.possessionType === PossesionType.WITH_PERMIT) {
+      await this.validateSpeciesForPermit(ctx, ctx.params.permitData, ctx.params.speciesClassifier);
     }
     return this.createEntity(ctx);
+  }
+
+  @Method
+  async validateSpeciesForPermit(ctx: Context, permit: Permit, speciesClassifierId: number) {
+    // Zoologijos sodų leidimuose rūšys nenurodomos.
+    if (!permit || permit.type === PermitTypes.ZOO) return;
+
+    if (permit.forest && !permit.fencingOffDate) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'No fencing off date',
+        422,
+        'NO_FENCING_OFF_DATE',
+      );
+    }
+
+    const permitSpecies: PermitSpecies[] = await ctx.call('permits.species.find', {
+      query: { permit: permit.id },
+    });
+
+    // Seni leidimai be nurodytų rūšių neribojami.
+    if (!permitSpecies.length) return;
+
+    const classifier: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
+      id: speciesClassifierId,
+      scope: false,
+    });
+
+    if (!isSpeciesAllowedByPermit(permitSpecies, speciesClassifierId, classifier?.family)) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Incorrect species',
+        422,
+        'INCORRECT_SPECIES',
+      );
+    }
   }
 
   @Method

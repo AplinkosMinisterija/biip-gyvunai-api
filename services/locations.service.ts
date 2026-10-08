@@ -2,6 +2,7 @@
 import moleculer, { Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 import { GeomFeatureCollection } from '../modules/geometry';
+import { extractNameSearch, filterByName } from '../modules/search';
 import { CommonFields, CommonPopulates, Table } from '../types';
 const getBox = (geom: GeomFeatureCollection, tolerance: number = 0.001) => {
   const coordinates: any = geom.features[0].geometry.coordinates;
@@ -39,7 +40,7 @@ export default class LocationsService extends moleculer.Service {
       ttl: 24 * 60 * 60,
     },
   })
-  async getMunicipalities(ctx: Context) {
+  async getMunicipalities(ctx: Context<{ search?: string; query?: unknown }>) {
     const res = await fetch(
       `${process.env.GEO_SERVER}/qgisserver/uetk_zuvinimas?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=municipalities&OUTPUTFORMAT=application/json&propertyName=pavadinimas,kodas`,
       {
@@ -63,9 +64,11 @@ export default class LocationsService extends moleculer.Service {
         return s1.name.localeCompare(s2.name);
       });
 
+    const rows = filterByName(items, extractNameSearch(ctx.params));
+
     return {
-      rows: items,
-      total: items.length,
+      rows,
+      total: rows.length,
     };
   }
 

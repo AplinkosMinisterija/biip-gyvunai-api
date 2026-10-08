@@ -7,6 +7,11 @@ import PostgisMixin from 'moleculer-postgis';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
+  PermitIdentity,
+  isMunicipalityAccepted,
+  isPermitIdentityChanged,
+} from '../modules/permitValidation';
+import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
   COMMON_DELETED_SCOPES,
@@ -17,6 +22,7 @@ import {
   CommonFields,
   CommonPopulates,
   EntityChangedParams,
+  FieldHookCallback,
   RestrictionType,
   Table,
   throwBadRequestError,
@@ -34,7 +40,7 @@ import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
-enum PermitTypes {
+export enum PermitTypes {
   ZOO = 'ZOO',
   AVIARY = 'AVIARY',
 }
@@ -162,9 +168,15 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
           },
         },
       },
-      type: 'string',
+      type: {
+        type: 'enum',
+        values: Object.values(PermitTypes),
+      },
       address: 'string',
-      municipality: 'object',
+      municipality: {
+        type: 'object',
+        validate: 'validateMunicipality',
+      },
       cadastralIds: {
         type: 'array',
         items: 'string',
@@ -549,20 +561,38 @@ export default class PermitsService extends moleculer.Service {
   }
 
   @Method
-  async beforeCreate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit = await this.findEntity(ctx, {
+  async assertPermitUnique(ctx: Context<any, UserAuthMeta>, permit: PermitIdentity) {
+    const duplicate = await this.findEntity(ctx, {
       query: JSON.stringify({
         issueDate: {
-          $gte: formatDateFrom(ctx.params.issueDate),
-          $lte: formatDateTo(ctx.params.issueDate),
+          $gte: formatDateFrom(permit.issueDate),
+          $lte: formatDateTo(permit.issueDate),
         },
-        issuer: ctx.params.issuer,
-        permitNumber: ctx.params.permitNumber,
+        issuer: permit.issuer,
+        permitNumber: permit.permitNumber,
+        ...(permit.id && { id: { $ne: permit.id } }),
       }),
     });
-    if (existingPermit) {
-      return throwBadRequestError('Permit already exists');
+
+    if (duplicate) {
+      throwBadRequestError('Permit already exists');
     }
+  }
+
+  @Method
+  validateMunicipality({ value, entity }: FieldHookCallback) {
+    if (isMunicipalityAccepted(value, entity?.municipality)) return true;
+
+    return 'Invalid municipality';
+  }
+
+  @Method
+  async beforeCreate(ctx: Context<any, UserAuthMeta>) {
+    await this.assertPermitUnique(ctx, {
+      issueDate: ctx.params.issueDate,
+      issuer: ctx.params.issuer,
+      permitNumber: ctx.params.permitNumber,
+    });
 
     return ctx;
   }
@@ -719,6 +749,26 @@ export default class PermitsService extends moleculer.Service {
     });
     if (!existingPermit) {
       return throwValidationError('Invalid permit');
+    }
+
+    // Tikrinama tik pakeitus numerį, išdavėją ar datą, kad seni pasikartojantys leidimai
+    // liktų redaguojami kitais laukais.
+    // `issuer` grąžinamas užpildytas (defaultPopulates), todėl imamas jo id.
+    const current: PermitIdentity = {
+      id: existingPermit.id,
+      issueDate: existingPermit.issueDate,
+      issuer: (existingPermit.issuer as any)?.id ?? existingPermit.issuer,
+      permitNumber: existingPermit.permitNumber,
+    };
+    const updated: PermitIdentity = {
+      id: current.id,
+      issueDate: ctx.params.issueDate ?? current.issueDate,
+      issuer: ctx.params.issuer ?? current.issuer,
+      permitNumber: ctx.params.permitNumber ?? current.permitNumber,
+    };
+
+    if (isPermitIdentityChanged(current, updated)) {
+      await this.assertPermitUnique(ctx, updated);
     }
 
     return ctx;

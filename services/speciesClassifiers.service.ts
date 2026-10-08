@@ -4,6 +4,7 @@ import moleculer from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
+import { normalizeClassifierName, normalizedColumnSql } from '../modules/permitValidation';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -53,11 +54,15 @@ export type SpeciesClassifier<
         primaryKey: true,
         secure: true,
       },
-      name: 'string|required',
+      name: {
+        type: 'string',
+        required: true,
+        validate: 'validateUniqueName',
+      },
       nameLatin: {
         type: 'string',
         required: true,
-        validate: 'validateLatinName',
+        validate: 'validateUniqueName',
       },
       family: {
         type: 'number',
@@ -93,18 +98,31 @@ export type SpeciesClassifier<
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
   @Method
-  async validateLatinName({ ctx, value, operation, entity }: FieldHookCallback) {
-    const name = ctx?.params?.name || entity?.name;
-    const nameLatin = value;
+  async validateUniqueName({ ctx, params, operation, entity }: FieldHookCallback) {
+    const name = params?.name ?? entity?.name;
+    const nameLatin = params?.nameLatin ?? entity?.nameLatin;
 
-    if (operation == 'create' || (entity && entity.nameLatin != value)) {
-      if (name && nameLatin) {
-        const found: number = await this.countEntities(null, {
-          query: { name, nameLatin },
-        });
-        if (!!found) return `Name '${value}' is not available.`;
-      }
-    }
+    if (!name || !nameLatin) return true;
+
+    const isChanged =
+      operation === 'create' ||
+      normalizeClassifierName(name) !== normalizeClassifierName(entity?.name) ||
+      normalizeClassifierName(nameLatin) !== normalizeClassifierName(entity?.nameLatin);
+
+    if (!isChanged) return true;
+
+    // Lyginama be didžiųjų raidžių ir tarpų skirtumų, kad „Dama dama“ ir „dama  dama “ nesidubliuotų.
+    const adapter = await this.getAdapter(ctx);
+    const duplicate = await adapter
+      .client('speciesClassifiers')
+      .whereNull('deletedAt')
+      .whereRaw(`${normalizedColumnSql('name')} = ?`, [normalizeClassifierName(name)])
+      .whereRaw(`${normalizedColumnSql('name_latin')} = ?`, [normalizeClassifierName(nameLatin)])
+      .modify((query: any) => entity?.id && query.whereNot('id', entity.id))
+      .first('id');
+
+    if (duplicate) return `Name '${nameLatin}' is not available.`;
+
     return true;
   }
 }
