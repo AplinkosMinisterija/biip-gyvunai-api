@@ -110,7 +110,6 @@ export default class SpeciesClassifiersService extends moleculer.Service {
         nameLatin: 'Cervidae',
         species: [
           { name: 'Danielius', nameLatin: 'Dama dama' },
-          { name: 'Danielius', nameLatin: 'Cervus dama' },
           { name: 'Taurieji elniai', nameLatin: 'Cervus elaphus' },
         ],
       },

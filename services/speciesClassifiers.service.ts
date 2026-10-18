@@ -57,12 +57,11 @@ export type SpeciesClassifier<
       name: {
         type: 'string',
         required: true,
-        validate: 'validateUniqueName',
       },
       nameLatin: {
         type: 'string',
         required: true,
-        validate: 'validateUniqueName',
+        validate: 'validateUniqueLatinName',
       },
       family: {
         type: 'number',
@@ -97,17 +96,15 @@ export type SpeciesClassifier<
   },
 })
 export default class SpeciesClassifiersService extends moleculer.Service {
+  // AAD sprendimas (#85, 2 kl.): lotyniškas pavadinimas rūšių sąraše unikalus. Tikrinama tik
+  // jį pakeitus, kad jau esami dublikatai (#85, 20 kl.) liktų redaguojami kitais laukais.
   @Method
-  async validateUniqueName({ ctx, params, operation, entity }: FieldHookCallback) {
-    const name = params?.name ?? entity?.name;
-    const nameLatin = params?.nameLatin ?? entity?.nameLatin;
-
-    if (!name || !nameLatin) return true;
+  async validateUniqueLatinName({ ctx, value, operation, entity }: FieldHookCallback) {
+    if (!value) return true;
 
     const isChanged =
       operation === 'create' ||
-      normalizeClassifierName(name) !== normalizeClassifierName(entity?.name) ||
-      normalizeClassifierName(nameLatin) !== normalizeClassifierName(entity?.nameLatin);
+      normalizeClassifierName(value) !== normalizeClassifierName(entity?.nameLatin);
 
     if (!isChanged) return true;
 
@@ -116,12 +113,11 @@ export default class SpeciesClassifiersService extends moleculer.Service {
     const duplicate = await adapter
       .client('speciesClassifiers')
       .whereNull('deletedAt')
-      .whereRaw(`${normalizedColumnSql('name')} = ?`, [normalizeClassifierName(name)])
-      .whereRaw(`${normalizedColumnSql('name_latin')} = ?`, [normalizeClassifierName(nameLatin)])
+      .whereRaw(`${normalizedColumnSql('name_latin')} = ?`, [normalizeClassifierName(value)])
       .modify((query: any) => entity?.id && query.whereNot('id', entity.id))
       .first('id');
 
-    if (duplicate) return `Name '${nameLatin}' is not available.`;
+    if (duplicate) return `Name '${value}' is not available.`;
 
     return true;
   }

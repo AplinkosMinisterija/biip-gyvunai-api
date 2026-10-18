@@ -21,6 +21,7 @@ import {
   CommonFields,
   CommonPopulates,
   DeepQuery,
+  FieldHookCallback,
   GroupByType,
   RestrictionType,
   Table,
@@ -138,6 +139,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
         columnType: 'integer',
         columnName: 'speciesClassifierId',
         required: true,
+        validate: 'validateSpeciesClassifier',
         deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
@@ -296,6 +298,24 @@ export default class SpeciesService extends moleculer.Service {
       await this.validateSpeciesForPermit(ctx, ctx.params.permitData, ctx.params.speciesClassifier);
     }
     return this.createEntity(ctx);
+  }
+
+  // DB ryšio su klasifikatoriumi nėra, todėl be šios patikros rūšis galėjo rodyti į
+  // neegzistuojantį klasifikatorių (#85, 19 kl.). Nepakeista sena reikšmė netikrinama;
+  // `entity` čia — neapdorota DB eilutė, todėl laukas pagal stulpelio pavadinimą.
+  @Method
+  async validateSpeciesClassifier({ ctx, value, operation, entity }: FieldHookCallback) {
+    const storedId = entity?.speciesClassifierId;
+    if (operation !== 'create' && storedId != null && Number(value) === Number(storedId)) {
+      return true;
+    }
+    if (value === null) return 'Invalid species classifier';
+
+    const classifier: SpeciesClassifier = await ctx.call('speciesClassifiers.resolve', {
+      id: value,
+    });
+
+    return classifier ? true : 'Invalid species classifier';
   }
 
   @Method

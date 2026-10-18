@@ -144,6 +144,11 @@ describe('permit, species and classifier validation (integration)', () => {
   });
 
   describe('species on a permit', () => {
+    const INVALID_CLASSIFIER = {
+      code: 422,
+      type: 'VALIDATION_ERROR',
+      data: { field: 'speciesClassifier' },
+    };
     const meta = userMeta({ userId: HOLDER });
     const newSpecies = (permit: number, speciesClassifier: number) =>
       broker.call(
@@ -212,6 +217,51 @@ describe('permit, species and classifier validation (integration)', () => {
 
       await expect(newSpecies(permit, speciesB)).resolves.toMatchObject({ permit });
     });
+
+    it('rejects a classifier that does not exist or is deleted', async () => {
+      const permit = await createPermitFixture({ permitNumber: 'ZOO-2', users: [HOLDER] });
+      const [deleted] = await knex('speciesClassifiers')
+        .insert({
+          name: 'Panaikinta rūšis',
+          nameLatin: 'Deleta testa',
+          familyClassifierId: familyId,
+          deletedAt: new Date(),
+        })
+        .returning('id');
+      classifierIds.push(insertId(deleted));
+
+      await expect(newSpecies(permit, 99999999)).rejects.toMatchObject(INVALID_CLASSIFIER);
+      await expect(newSpecies(permit, insertId(deleted))).rejects.toMatchObject(INVALID_CLASSIFIER);
+    });
+
+    it('rejects changing a species to a missing classifier but keeps other edits possible', async () => {
+      const permit = await createPermitFixture({ permitNumber: 'ZOO-3', users: [HOLDER] });
+      const species = (await newSpecies(permit, speciesA)) as { id: number };
+      // Sena rūšis, jau rodanti į neegzistuojantį klasifikatorių (kaip PROD rūšis 231).
+      await knex('species').where({ id: species.id }).update({ speciesClassifierId: 99999998 });
+
+      await expect(
+        broker.call(
+          'species.update',
+          { id: species.id, speciesClassifier: 99999999 },
+          { meta: adminMeta() },
+        ),
+      ).rejects.toMatchObject(INVALID_CLASSIFIER);
+      await expect(
+        broker.call(
+          'species.update',
+          { id: species.id, speciesClassifier: null },
+          { meta: adminMeta() },
+        ),
+      ).rejects.toMatchObject(INVALID_CLASSIFIER);
+      await expect(
+        broker.call(
+          'species.update',
+          { id: species.id, speciesClassifier: 99999998, certificateNumber: 'CERT-1' },
+          { meta: adminMeta() },
+        ),
+      ).resolves.toMatchObject({ certificateNumber: 'CERT-1', speciesClassifier: 99999998 });
+    });
   });
 
   describe('species classifiers', () => {
@@ -255,6 +305,42 @@ describe('permit, species and classifier validation (integration)', () => {
           { meta: adminMeta() },
         ),
       ).resolves.toMatchObject({ type: 'PROTECTED' });
+    });
+
+    it('rejects the same Latin name under a different name', async () => {
+      const created: { id: number } = await create('Lotyniškas vilkas', 'Canis latinus');
+      classifierIds.push(Number(created.id));
+
+      await expect(create('Kitaip vadinamas vilkas', 'canis  Latinus')).rejects.toMatchObject({
+        code: 422,
+      });
+    });
+
+    it('allows the same name with a different Latin name', async () => {
+      const first: { id: number } = await create('Bendravardis vilkas', 'Canis primus');
+      const second: { id: number } = await create('Bendravardis vilkas', 'Canis secundus');
+      classifierIds.push(Number(first.id), Number(second.id));
+
+      expect(second.id).not.toEqual(first.id);
+    });
+
+    it('keeps an existing Latin duplicate editable by its other fields', async () => {
+      const rows = await knex('speciesClassifiers')
+        .insert([
+          { name: 'Sena rozela', nameLatin: 'Platycercus testus', familyClassifierId: familyId },
+          { name: 'Kita rozela', nameLatin: 'Platycercus testus', familyClassifierId: familyId },
+        ])
+        .returning('id');
+      const [, duplicateId] = rows.map(insertId);
+      classifierIds.push(...rows.map(insertId));
+
+      await expect(
+        broker.call(
+          'speciesClassifiers.update',
+          { id: duplicateId, name: 'Pataisyta rozela', nameLatin: 'Platycercus testus' },
+          { meta: adminMeta() },
+        ),
+      ).resolves.toMatchObject({ name: 'Pataisyta rozela' });
     });
   });
 });
