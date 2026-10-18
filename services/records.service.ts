@@ -7,7 +7,11 @@ import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { latestRecordByDate } from '../modules/latestRecord';
-import { AMOUNT_RECORD_TYPES, OUTGOING_RECORD_TYPES } from '../modules/speciesAmount';
+import {
+  AMOUNT_RECORD_TYPES,
+  OUTGOING_RECORD_TYPES,
+  calculateGroupAmount,
+} from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -107,6 +111,14 @@ export type Record<
   P extends keyof Populates = never,
   F extends keyof (Fields & Populates) = keyof Fields,
 > = Table<Fields, Populates, P, F>;
+
+const throwInvalidNumberOfAnimals = () => {
+  throw new moleculer.Errors.MoleculerClientError(
+    'Invalid number of animals',
+    422,
+    'INVALID_NUMBER_OF_ANIMALS',
+  );
+};
 
 @Service({
   name: 'records',
@@ -263,9 +275,9 @@ export type Record<
       count: ['beforeSelect', 'handleFilters'],
       get: ['beforeSelect', 'handleFilters'],
       all: ['beforeSelect', 'handleFilters'],
-      update: ['beforeMutate'],
-      replace: ['beforeMutate'],
-      remove: ['beforeMutate'],
+      update: ['beforeMutate', 'validateChangedNumberOfAnimals'],
+      replace: ['beforeMutate', 'validateChangedNumberOfAnimals'],
+      remove: ['beforeMutate', 'validateRemovedNumberOfAnimals'],
     },
     after: {
       // Perskaičiavimas pirmas: laiško siuntimo klaida neturi palikti pasenusio kiekio.
@@ -456,11 +468,73 @@ export default class RecordsService extends moleculer.Service {
     const count = numberOfAnimals ?? 0;
     const exceedsStock = OUTGOING_RECORD_TYPES.includes(type) && (species.amount ?? 0) - count < 0;
     if (count < 1 || exceedsStock) {
-      throw new moleculer.Errors.MoleculerClientError(
-        'Invalid number of animals',
-        422,
-        'INVALID_NUMBER_OF_ANIMALS',
-      );
+      throwInvalidNumberOfAnimals();
+    }
+  }
+
+  // Keičiant grupinės apskaitos įrašą likutis negali tapti neigiamas — kitaip administratorius,
+  // padidinęs nugaišusių ar sumažinęs įsigytų skaičių arba perkėlęs įrašą kitai rūšiai, galėjo
+  // nuvesti likutį į minusą. Tikrinama tik pasikeitus kiekiui, tipui ar rūšiai, kad seni
+  // įrašai liktų redaguojami kitais laukais.
+  @Method
+  async validateChangedNumberOfAnimals(ctx: Context<any, UserAuthMeta>) {
+    const previous: Record = ctx.locals.entity;
+    // Perduotas `null` irgi yra pakeitimas, todėl tikrinama `undefined`, ne `??`.
+    const paramOrPrevious = <K extends 'species' | 'type' | 'numberOfAnimals'>(
+      field: K,
+    ): Record[K] => (ctx.params[field] !== undefined ? ctx.params[field] : previous[field]);
+    const numberOfAnimals = paramOrPrevious('numberOfAnimals');
+    const next = {
+      species: paramOrPrevious('species'),
+      type: paramOrPrevious('type'),
+      numberOfAnimals: numberOfAnimals == null ? numberOfAnimals : Number(numberOfAnimals),
+    };
+    const isChanged =
+      Number(next.species) !== Number(previous.species) ||
+      next.type !== previous.type ||
+      next.numberOfAnimals !== previous.numberOfAnimals;
+
+    if (isChanged) await this.assertStockAfterChange(ctx, previous, next);
+    return ctx;
+  }
+
+  // Ištrynus įsigijimo ar gimimo įrašą, kai dalis gyvūnų jau išėjo, likutis taip pat taptų
+  // neigiamas.
+  @Method
+  async validateRemovedNumberOfAnimals(ctx: Context<any, UserAuthMeta>) {
+    await this.assertStockAfterChange(ctx, ctx.locals.entity);
+    return ctx;
+  }
+
+  // Grupinės apskaitos rūšies likutis po pakeitimo negali sumažėti žemiau nulio. Tikrinamas tik
+  // mažėjimas, kad jau neigiami seni duomenys netrukdytų jų taisyti.
+  @Method
+  async assertStockAfterChange(
+    ctx: Context<any, UserAuthMeta>,
+    previous: Partial<Record>,
+    next?: Pick<Record, 'species' | 'type' | 'numberOfAnimals'>,
+  ) {
+    const amountChanges = new Map<number, number>();
+    const addChange = (speciesId: number | undefined | null, change: number) => {
+      if (!speciesId) return;
+      const id = Number(speciesId);
+      amountChanges.set(id, (amountChanges.get(id) ?? 0) + change);
+    };
+    addChange(previous.species, -calculateGroupAmount([previous as Record]));
+    if (next) addChange(next.species, calculateGroupAmount([next]));
+
+    for (const [speciesId, change] of amountChanges) {
+      const species: Species = await ctx.call('species.resolve', { id: speciesId });
+      if (!species || species.type === AccountingType.INDIVIDUAL) continue;
+
+      const isAmountRecord =
+        !!next && speciesId === Number(next.species) && AMOUNT_RECORD_TYPES.includes(next.type);
+      if (
+        (isAmountRecord && (next.numberOfAnimals ?? 0) < 1) ||
+        (change < 0 && (species.amount ?? 0) + change < 0)
+      ) {
+        throwInvalidNumberOfAnimals();
+      }
     }
   }
 
