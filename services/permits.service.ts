@@ -6,6 +6,7 @@ import { Action, Event, Method, Service } from 'moleculer-decorators';
 import PostgisMixin from 'moleculer-postgis';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { REMOVE_PERMIT_WITH_DATA_SQL } from '../modules/permitDeletion';
 import {
   PermitIdentity,
   isMunicipalityAccepted,
@@ -29,6 +30,7 @@ import {
   Table,
   throwBadRequestError,
   throwNoRightsError,
+  throwNotFoundError,
   throwValidationError,
 } from '../types';
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
@@ -347,9 +349,7 @@ export default class PermitsService extends moleculer.Service {
       throwNoRightsError();
     }
 
-    await ctx.call('permits.remove', {
-      id,
-    });
+    await this.removePermitWithData(ctx, id);
 
     await this.createPermitHistory(
       id,
@@ -590,6 +590,23 @@ export default class PermitsService extends moleculer.Service {
     if (duplicate) {
       throwBadRequestError('Permit already exists');
     }
+  }
+
+  // Leidimas naikinamas kartu su jo duomenimis vienu SQL sakiniu, todėl `permits.remove`
+  // nenaudojamas; įvykis „permits.removed“ (viešų rodinių atnaujinimui) siunčiamas atskirai.
+  @Method
+  async removePermitWithData(ctx: Context<unknown, UserAuthMeta>, permitId: number) {
+    const adapter = await this.getAdapter(ctx);
+    const { rows } = await adapter.client.raw(REMOVE_PERMIT_WITH_DATA_SQL, {
+      permitId,
+      userId: ctx.meta.user?.id ?? null,
+    });
+
+    if (!rows.length) {
+      throwNotFoundError('Permit not found');
+    }
+
+    await this.entityChanged('remove', { id: permitId }, null, ctx);
   }
 
   @Method

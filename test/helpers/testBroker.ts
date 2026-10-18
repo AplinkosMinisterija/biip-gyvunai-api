@@ -63,6 +63,13 @@ export const resetDomainTables = async (): Promise<void> => {
   await knex.raw(`TRUNCATE ${DOMAIN_TABLES.join(', ')} RESTART IDENTITY`);
 };
 
+// Testai neturi remtis konkrečiais klasifikatorių id: duomenų migracijos (pvz. danieliaus
+// sujungimas) dalį pradinių klasifikatorių pažymi panaikintais.
+export const activeClassifierIds = async (count: number): Promise<number[]> =>
+  (
+    await knex('speciesClassifiers').whereNull('deletedAt').orderBy('id').limit(count).select('id')
+  ).map((row: { id: number }) => Number(row.id));
+
 type MetaOptions = { userId: number; profile?: number };
 
 export const adminMeta = (): Partial<UserAuthMeta> => ({

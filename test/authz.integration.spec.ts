@@ -2,6 +2,7 @@
 
 import { ServiceBroker } from 'moleculer';
 import {
+  activeClassifierIds,
   adminMeta,
   createPermitFixture,
   createTestBroker,
@@ -126,16 +127,27 @@ describe('reference fields are frozen for non-admin updates (integration)', () =
     await resetDomainTables();
     broker = await createTestBroker();
     const permitId = await createPermitFixture({ permitNumber: 'FROZEN-1', users: [OWNER] });
+    const [ownClassifier, otherClassifier, individualClassifier] = await activeClassifierIds(3);
     const meta = userMeta({ userId: OWNER });
 
     const own: { id: number } = await broker.call(
       'species.newSpecies',
-      { permit: permitId, speciesClassifier: 1, possessionType: 'WITH_PERMIT', type: 'GROUP' },
+      {
+        permit: permitId,
+        speciesClassifier: ownClassifier,
+        possessionType: 'WITH_PERMIT',
+        type: 'GROUP',
+      },
       { meta },
     );
     const other: { id: number } = await broker.call(
       'species.newSpecies',
-      { permit: permitId, speciesClassifier: 2, possessionType: 'WITH_PERMIT', type: 'GROUP' },
+      {
+        permit: permitId,
+        speciesClassifier: otherClassifier,
+        possessionType: 'WITH_PERMIT',
+        type: 'GROUP',
+      },
       { meta },
     );
     ownSpeciesId = own.id;
@@ -150,7 +162,12 @@ describe('reference fields are frozen for non-admin updates (integration)', () =
 
     const individual: { id: number } = await broker.call(
       'species.newSpecies',
-      { permit: permitId, speciesClassifier: 3, possessionType: 'WITH_PERMIT', type: 'INDIVIDUAL' },
+      {
+        permit: permitId,
+        speciesClassifier: individualClassifier,
+        possessionType: 'WITH_PERMIT',
+        type: 'INDIVIDUAL',
+      },
       { meta },
     );
     const animal: { id: number } = await broker.call(
