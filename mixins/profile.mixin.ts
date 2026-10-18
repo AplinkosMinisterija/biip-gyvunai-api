@@ -1,3 +1,4 @@
+import { pick } from 'lodash';
 import { Context } from 'moleculer';
 import { AuthUserRole, UserAuthMeta } from '../services/api.service';
 
@@ -115,7 +116,7 @@ export default {
     async beforeMutate(
       ctx: Context<Record<string, unknown> & { id: number | string }, UserAuthMeta>,
     ) {
-      const accessQuery = this.buildAccessQuery(ctx.meta);
+      const accessQuery = this.buildAccessQuery(ctx.meta, !!this.settings?.ownershipByUsersColumn);
 
       const entity = await this.resolveEntities(
         ctx,
@@ -126,7 +127,12 @@ export default {
       // Apribotam naudotojui savininkystės ir serviso nurodyti (`settings.userImmutableFields`)
       // ryšio laukai lieka tokie, kokie saugomi — kitaip savo įrašą būtų galima perkelti
       // į svetimą rūšį ar leidimą, o rūšiai įrašyti bet kokį `amount`.
-      if (accessQuery) {
+      // Servisas, nurodęs `settings.userEditableFields`, apribotam naudotojui leidžia keisti
+      // tik tuos laukus (pvz. leidimą išduoda AAD, turėtojas papildo tik aptvėrimo duomenis).
+      const editableFields: readonly string[] | undefined = this.settings?.userEditableFields;
+      if (accessQuery && editableFields) {
+        ctx.params = { id: ctx.params.id, ...pick(ctx.params, editableFields) };
+      } else if (accessQuery) {
         const frozenFields: readonly string[] = [
           ...OWNERSHIP_FIELDS,
           ...(this.settings?.userImmutableFields ?? []),

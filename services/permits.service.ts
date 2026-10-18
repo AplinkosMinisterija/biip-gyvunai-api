@@ -23,6 +23,8 @@ import {
   CommonPopulates,
   EntityChangedParams,
   FieldHookCallback,
+  PERMIT_FIELDS_EDITABLE_BY_HOLDER,
+  PERMIT_OWNERSHIP_FIELDS,
   RestrictionType,
   Table,
   throwBadRequestError,
@@ -244,6 +246,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
     defaultPopulates: ['issuer', 'geom'],
+    // ProfileMixin.beforeMutate: nuosavybė tikrinama pagal jsonb `users`,
+    // o turėtojas gali keisti tik aptvėrimo laukus.
+    ownershipByUsersColumn: true,
+    userEditableFields: PERMIT_FIELDS_EDITABLE_BY_HOLDER,
   },
   actions: {
     create: {
@@ -274,7 +280,9 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       count: 'beforeSelectPermit',
       get: 'beforeSelectPermit',
       all: 'beforeSelectPermit',
-      update: 'beforeUpdate',
+      update: ['beforeMutate', 'beforeUpdate'],
+      replace: 'beforeMutate',
+      remove: 'beforeMutate',
     },
   },
 })
@@ -356,6 +364,7 @@ export default class PermitsService extends moleculer.Service {
 
   @Action({
     rest: 'GET /deleted',
+    auth: RestrictionType.ADMIN,
   })
   listDeleted(ctx: Context<{}>) {
     return ctx.call('permits.list', {
@@ -371,7 +380,9 @@ export default class PermitsService extends moleculer.Service {
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
   ) {
     const id = ctx?.params?.id;
-    const permitSpecies = ctx?.params?.permitSpecies || [];
+    // Turėtojas leidime nurodytų rūšių nekeičia (žr. beforeUpdate).
+    const isHolderUpdate = !!id && !!this.buildAccessQuery(ctx.meta, true);
+    const permitSpecies = isHolderUpdate ? [] : ctx?.params?.permitSpecies || [];
 
     const uniqueFamilySpecies: any = {};
     const uniqueFamily: any = {};
@@ -404,7 +415,9 @@ export default class PermitsService extends moleculer.Service {
       ...ctx.params,
     });
 
-    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+    if (!isHolderUpdate) {
+      await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+    }
 
     return ctx.call('permits.resolve', { id: permit.id });
   }
@@ -588,6 +601,10 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
+    if (this.buildAccessQuery(ctx.meta, true)) {
+      for (const field of PERMIT_OWNERSHIP_FIELDS) delete ctx.params[field];
+    }
+
     await this.assertPermitUnique(ctx, {
       issueDate: ctx.params.issueDate,
       issuer: ctx.params.issuer,
@@ -743,13 +760,8 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeUpdate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit: Permit = await this.resolveEntities(ctx, {
-      id: ctx.params.id,
-      throwIfNotExist: true,
-    });
-    if (!existingPermit) {
-      return throwValidationError('Invalid permit');
-    }
+    // Leidimą (tik savininkui) suranda ir turėtojo keičiamus laukus palieka `beforeMutate`.
+    const existingPermit: Permit = ctx.locals.entity;
 
     // Tikrinama tik pakeitus numerį, išdavėją ar datą, kad seni pasikartojantys leidimai
     // liktų redaguojami kitais laukais.

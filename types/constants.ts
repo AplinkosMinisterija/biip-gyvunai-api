@@ -142,6 +142,17 @@ export const COMMON_ACTION_PARAMS = {
 export const COMMON_DEFAULT_SCOPES = ['notDeleted'];
 export const COMMON_DELETED_SCOPES = ['-notDeleted', 'deleted'];
 
+// Leidimą išduoda AAD, todėl turėtojas savo leidime gali papildyti tik aptvėrimo duomenis
+// (išorinės sistemos forma „Atnaujinti“); kitus laukus keičia tik administratorius.
+export const PERMIT_FIELDS_EDITABLE_BY_HOLDER = [
+  'fencingOffDate',
+  'fencingOffStartDate',
+  'fencedArea',
+] as const;
+
+// Leidimo nuosavybės laukai: juos nustato tik administratorius.
+export const PERMIT_OWNERSHIP_FIELDS = ['tenant', 'users'] as const;
+
 export function throwNoRightsError(message?: string): Errors.MoleculerError {
   throw new Moleculer.Errors.MoleculerClientError(message || `No rights.`, 401, 'NO_RIGHTS');
 }
