@@ -115,6 +115,9 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
   name: 'species',
   mixins: [DbConnection(), ProfileMixin],
   settings: {
+    // Ryšiai su leidimu ir klasifikatoriumi užpildomi su scope: false — panaikinto
+    // leidimo duomenis AAD peržiūri tik skaitymui (#85, 5 kl.), o sujungto klasifikatoriaus
+    // pavadinimas neturi dingti.
     fields: {
       id: {
         type: 'string',
@@ -129,6 +132,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
         required: false,
         populate: {
           action: 'permits.resolve',
+          params: { scope: false },
         },
       },
       speciesClassifier: {
@@ -140,6 +144,7 @@ const SPECIES_ACTION_PAGINATION_PARAMS = {
         deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
+          params: { scope: false },
         },
       },
       aviary: 'string',

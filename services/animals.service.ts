@@ -59,6 +59,9 @@ export type Animal<
   name: 'animals',
   mixins: [DbConnection(), ProfileMixin],
   settings: {
+    // Ryšiai su rūšimi, leidimu ir klasifikatoriumi užpildomi su scope: false — panaikinto
+    // leidimo duomenis AAD peržiūri tik skaitymui (#85, 5 kl.), o sujungto klasifikatoriaus
+    // pavadinimas neturi dingti.
     fields: {
       id: {
         type: 'string',
@@ -73,6 +76,7 @@ export type Animal<
         required: true,
         populate: {
           action: 'species.resolve',
+          params: { scope: false },
         },
       },
       permit: {
@@ -81,6 +85,7 @@ export type Animal<
         columnName: 'permitId',
         populate: {
           action: 'permits.resolve',
+          params: { scope: false },
         },
       },
       speciesClassifier: {
@@ -89,6 +94,7 @@ export type Animal<
         columnName: 'speciesClassifierId',
         populate: {
           action: 'speciesClassifiers.resolve',
+          params: { scope: false },
         },
       },
       gender: {

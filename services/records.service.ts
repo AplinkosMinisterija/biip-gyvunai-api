@@ -124,6 +124,9 @@ const throwInvalidNumberOfAnimals = () => {
   name: 'records',
   mixins: [DbConnection(), ProfileMixin],
   settings: {
+    // Ryšiai su leidimu, rūšimi, gyvūnu ir klasifikatoriumi užpildomi su scope: false — panaikinto
+    // leidimo duomenis AAD peržiūri tik skaitymui (#85, 5 kl.), o sujungto klasifikatoriaus
+    // pavadinimas neturi dingti.
     fields: {
       id: {
         type: 'string',
@@ -139,6 +142,7 @@ const throwInvalidNumberOfAnimals = () => {
         required: false,
         populate: {
           action: 'animals.resolve',
+          params: { scope: false },
         },
       },
       permit: {
@@ -149,6 +153,7 @@ const throwInvalidNumberOfAnimals = () => {
         required: false,
         populate: {
           action: 'permits.resolve',
+          params: { scope: false },
         },
       },
       species: {
@@ -159,6 +164,7 @@ const throwInvalidNumberOfAnimals = () => {
         required: false,
         populate: {
           action: 'species.resolve',
+          params: { scope: false },
         },
       },
       fosteredAnimal: {
@@ -168,6 +174,7 @@ const throwInvalidNumberOfAnimals = () => {
         required: false,
         populate: {
           action: 'fosteredAnimals.resolve',
+          params: { scope: false },
         },
       },
       speciesClassifier: {
@@ -177,6 +184,7 @@ const throwInvalidNumberOfAnimals = () => {
         deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
+          params: { scope: false },
         },
       },
       type: {

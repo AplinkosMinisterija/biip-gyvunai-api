@@ -154,6 +154,16 @@ describe('permit deletion cascade (integration)', () => {
     expect(rows).toEqual([]);
   });
 
+  it('fills the deleted permit of a deleted species', async () => {
+    const species = (await broker.call(
+      'species.list',
+      { query: { permit: permitId }, scope: 'deleted', populate: ['permit'] },
+      { meta: adminMeta() },
+    )) as { rows: { permit: { id: number; permitNumber: string } }[] };
+
+    expect(species.rows[0].permit).toMatchObject({ id: permitId, permitNumber: 'DEL-CASCADE-1' });
+  });
+
   it('lets an admin read the deleted data with the deleted scope', async () => {
     const species: { rows: { id: number }[] } = await broker.call(
       'species.list',
