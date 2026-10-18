@@ -226,6 +226,7 @@ describe('permit ownership over HTTP (integration)', () => {
         issueDate: '2026-01-01',
         issuer: 1,
         type: 'ZOO',
+        file: [{ url: 'https://example.test/leidimas.pdf', name: 'leidimas.pdf', size: 1 }],
         users: `[${localUserId.holder}]`,
         tenant: holderTenant,
       });

@@ -605,6 +605,12 @@ export default class PermitsService extends moleculer.Service {
       for (const field of PERMIT_OWNERSHIP_FIELDS) delete ctx.params[field];
     }
 
+    // AAD sprendimas (#85, 3 kl.): leidimo dokumentas privalomas kuriant; seni leidimai be
+    // dokumento lieka redaguojami, todėl atnaujinant netikrinama.
+    if (!Array.isArray(ctx.params.file) || !ctx.params.file.length) {
+      throwValidationError('Permit file is required');
+    }
+
     await this.assertPermitUnique(ctx, {
       issueDate: ctx.params.issueDate,
       issuer: ctx.params.issuer,

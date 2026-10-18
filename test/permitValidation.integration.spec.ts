@@ -13,6 +13,7 @@ import {
 const HOLDER = 5;
 const ISSUE_DATE = '2026-01-01';
 const ISSUER = 1;
+const PERMIT_FILE = [{ url: 'https://example.test/leidimas.pdf', name: 'leidimas.pdf', size: 1 }];
 const VALID_MUNICIPALITY = { id: 13, name: 'Vilniaus m. sav.' };
 
 const insertId = (row: any) => Number(typeof row === 'object' ? row.id : row);
@@ -77,7 +78,24 @@ describe('permit, species and classifier validation (integration)', () => {
       issueDate: ISSUE_DATE,
       issuer: ISSUER,
       type: 'AVIARY',
+      file: PERMIT_FILE,
       ...extra,
+    });
+
+    it('requires a document when creating a permit', async () => {
+      for (const file of [undefined, [] as unknown[]]) {
+        await expect(
+          broker.call('permits.create', permitParams('NOFILE-1', { file }), { meta: adminMeta() }),
+        ).rejects.toMatchObject({ code: 422, type: 'VALIDATION_ERROR' });
+      }
+    });
+
+    it('keeps an old permit without a document editable', async () => {
+      const permit = await createAviaryPermit();
+
+      await expect(
+        broker.call('permits.update', { id: permit, note: 'Be dokumento' }, { meta: adminMeta() }),
+      ).resolves.toMatchObject({ note: 'Be dokumento' });
     });
 
     it('rejects creating a permit with an existing number, issuer and date', async () => {
