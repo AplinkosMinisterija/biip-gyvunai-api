@@ -201,4 +201,83 @@ describe('record vaccine name, marking certificate and current marking (integrat
         .first('markingCertificateNo'),
     ).toEqual({ markingCertificateNo: 'PAZ-FOSTER-OLD' });
   });
+
+  describe('current certificate number on the card', () => {
+    const certificateOf = async (table: string, id: number) =>
+      knex(table).where({ id }).first('certificate', 'updatedAt');
+
+    it('follows the latest certificate record by date through create, edit and delete', async () => {
+      const animal = await newAnimal({ certificate: 'CARD-ORIGINAL' });
+      const certificate = (no: string, date: string) =>
+        newRecord({ animal: animal.id, type: 'CERTIFICATE_NO', date, certificateNo: no });
+
+      const latest = await certificate('CITES-2', '2026-02-01');
+      expect(await certificateOf('animals', animal.id)).toEqual({
+        certificate: 'CITES-2',
+        updatedAt: null,
+      });
+
+      const earlier = await certificate('CITES-1', '2025-01-01');
+      expect((await certificateOf('animals', animal.id)).certificate).toBe('CITES-2');
+
+      await broker.call('records.update', { id: latest.id, certificateNo: 'CITES-2B' }, { meta });
+      expect((await certificateOf('animals', animal.id)).certificate).toBe('CITES-2B');
+
+      await broker.call('records.remove', { id: latest.id }, { meta });
+      expect((await certificateOf('animals', animal.id)).certificate).toBe('CITES-1');
+
+      await broker.call('records.remove', { id: earlier.id }, { meta });
+      expect(await certificateOf('animals', animal.id)).toEqual({
+        certificate: 'CITES-1',
+        updatedAt: null,
+      });
+    });
+
+    it('updates a fostered animal card', async () => {
+      const [classifier] = await activeClassifierIds(1);
+      const fostered = (await broker.call(
+        'fosteredAnimals.newFosteredAnimal',
+        {
+          speciesClassifier: classifier,
+          gender: 'MALE',
+          address: 'Testo g. 2',
+          municipality: { id: 13, name: 'Vilniaus m. sav.' },
+          acquireType: 'FOUND',
+          date: '2026-01-01',
+          certificateNumber: 'FOSTER-CARD',
+          files: [],
+        },
+        { meta },
+      )) as { id: number };
+
+      await newRecord({
+        fosteredAnimal: fostered.id,
+        type: 'CERTIFICATE_NO',
+        date: '2026-03-01',
+        certificateNo: 'FOSTER-CITES',
+      });
+
+      expect(
+        await knex('fosteredAnimals').where({ id: fostered.id }).first('certificateNumber'),
+      ).toEqual({ certificateNumber: 'FOSTER-CITES' });
+      expect(
+        (await knex('fosteredAnimals').where({ id: fostered.id }).first('updatedAt')).updatedAt,
+      ).toBeNull();
+    });
+
+    it('leaves the group species card alone', async () => {
+      await knex('species').where({ id: groupSpecies }).update({ certificateNumber: 'GROUP-CARD' });
+
+      await newRecord({
+        species: groupSpecies,
+        type: 'CERTIFICATE_NO',
+        date: '2026-03-01',
+        certificateNo: 'GROUP-CITES',
+      });
+
+      expect(await knex('species').where({ id: groupSpecies }).first('certificateNumber')).toEqual({
+        certificateNumber: 'GROUP-CARD',
+      });
+    });
+  });
 });

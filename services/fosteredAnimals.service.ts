@@ -6,7 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import Moleculer from 'moleculer';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import { findLatestMarkingRecord } from '../modules/markingRecord';
+import { findLatestMarkingRecord } from '../modules/latestRecord';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -347,6 +347,19 @@ export default class FosteredAnimalsService extends moleculer.Service {
     }
     // `findEntity` id parametro nepaiso ir grąžintų pirmą naudotojo globojamą gyvūną.
     return this.resolveEntities(ctx, { id: fosteredAnimal.id });
+  }
+
+  // Kortelėje rodomas aktualus sertifikato Nr. (#85, 11 kl.) — jį nustato žurnalo įrašai, todėl
+  // atnaujinimo data nekeičiama: tai ne žmogaus atliktas kortelės pakeitimas.
+  @Action({
+    visibility: 'public',
+    params: { id: 'number', certificate: 'string' },
+  })
+  async setCurrentCertificate(ctx: Context<{ id: number; certificate: string }>) {
+    const adapter = await this.getAdapter(ctx);
+    await adapter.client('fosteredAnimals').where({ id: ctx.params.id }).update({
+      certificateNumber: ctx.params.certificate,
+    });
   }
 
   @Method

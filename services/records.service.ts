@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { latestRecordByDate } from '../modules/latestRecord';
 import { AMOUNT_RECORD_TYPES, OUTGOING_RECORD_TYPES } from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
@@ -268,9 +269,9 @@ export type Record<
     },
     after: {
       // Perskaičiavimas pirmas: laiško siuntimo klaida neturi palikti pasenusio kiekio.
-      create: ['recalculateSpeciesAmount', 'afterCreate'],
-      update: ['recalculateSpeciesAmount'],
-      remove: ['recalculateSpeciesAmount'],
+      create: ['recalculateSpeciesAmount', 'syncCurrentCertificate', 'afterCreate'],
+      update: ['recalculateSpeciesAmount', 'syncCurrentCertificate'],
+      remove: ['recalculateSpeciesAmount', 'syncCurrentCertificate'],
     },
   },
   actions: {
@@ -498,6 +499,49 @@ export default class RecordsService extends moleculer.Service {
     });
 
     return animal?.species;
+  }
+
+  // AAD sprendimas (#85, 11 kl.): gyvūno ir globojamo gyvūno kortelėje rodomas naujausio
+  // „Sertifikato Nr.“ įrašo numeris. Skaičiuojama iš visų likusių įrašų, todėl atgaline data
+  // įvestas, pakeistas ar ištrintas įrašas palieka teisingą numerį; nelikus įrašų kortelės
+  // reikšmė nekeičiama. Rūšies (grupinės apskaitos) kortelė nesinchronizuojama.
+  @Method
+  async syncCurrentCertificate(ctx: Context<unknown, UserAuthMeta>, result: Record | number) {
+    const previous: Partial<Record> | undefined = ctx.locals.entity;
+    const current: Partial<Record> | undefined = typeof result === 'object' ? result : undefined;
+    const certificateRecords = [previous, current].filter(
+      (record) => record?.type === RecordType.CERTIFICATE_NO,
+    );
+
+    const animalIds = new Set(certificateRecords.map(({ animal }) => animal).filter(Boolean));
+    const fosteredIds = new Set(
+      certificateRecords.map(({ fosteredAnimal }) => fosteredAnimal).filter(Boolean),
+    );
+
+    for (const id of animalIds) {
+      await this.applyLatestCertificate(ctx, 'animals', id);
+    }
+    for (const id of fosteredIds) {
+      await this.applyLatestCertificate(ctx, 'fosteredAnimals', id);
+    }
+
+    return result;
+  }
+
+  // Įrašai imami be naudotojo filtro: numerį galėjo įvesti kitas to paties leidimo naudotojas.
+  @Method
+  async applyLatestCertificate(ctx: Context, service: 'animals' | 'fosteredAnimals', id: number) {
+    const owner = service === 'animals' ? { animal: id } : { fosteredAnimal: id };
+    const records: Record[] = await this.broker.call('records.find', {
+      query: { ...owner, type: RecordType.CERTIFICATE_NO },
+    });
+    const certificate = latestRecordByDate(records)?.certificateNo;
+    if (!certificate) return;
+
+    await ctx.call(`${service}.setCurrentCertificate`, {
+      id,
+      certificate,
+    });
   }
 
   @Method

@@ -1,9 +1,9 @@
 import { Context } from 'moleculer';
-import { RecordType } from '../services/records.service';
+import { RecordType } from '../types';
 
 type DateValue = string | Date | null | undefined;
 
-type MarkingRecord = {
+type DatedRecord = {
   markingDate?: DateValue;
   date?: DateValue;
   createdAt?: DateValue;
@@ -11,10 +11,11 @@ type MarkingRecord = {
 
 const toTime = (value: DateValue) => (value ? new Date(value).getTime() || 0 : 0);
 
-// AAD sprendimas (#85, 12 kl.): kortelėje rodomas paskutinio ženklinimo įrašas — pagal ženklinimo
-// datą. Senuose įrašuose jos nėra, tada imama įrašo data; esant vienodai datai — vėliau įvestas.
-// Rikiuojama čia, nes DB mažėjimo tvarka tuščias datas iškeltų į priekį.
-export const latestMarkingRecord = <T extends MarkingRecord>(records: T[]): T | undefined =>
+// Kortelėje rodomas paskutinis įrašas pagal įvykio datą (#85, 11 ir 12 kl.): ženklinimo — pagal
+// ženklinimo datą, o jos neturintis (senas ar ne ženklinimo) įrašas — pagal įrašo datą; esant
+// vienodai datai — vėliau įvestas. Rikiuojama čia, nes DB mažėjimo tvarka tuščias datas iškeltų
+// į priekį.
+export const latestRecordByDate = <T extends DatedRecord>(records: T[]): T | undefined =>
   [...records].sort(
     (a, b) =>
       toTime(b.markingDate || b.date) - toTime(a.markingDate || a.date) ||
@@ -27,8 +28,8 @@ export const findLatestMarkingRecord = async (
   ctx: Context,
   owner: { animal: number } | { fosteredAnimal: number },
 ) => {
-  const records: MarkingRecord[] = await ctx.broker.call('records.find', {
+  const records: DatedRecord[] = await ctx.broker.call('records.find', {
     query: { ...owner, type: RecordType.MARKING },
   });
-  return latestMarkingRecord(records);
+  return latestRecordByDate(records);
 };
