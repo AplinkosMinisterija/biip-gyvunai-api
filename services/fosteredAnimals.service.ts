@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import Moleculer from 'moleculer';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { findLatestMarkingRecord } from '../modules/markingRecord';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -139,13 +140,7 @@ const FOSTERED_ANIMALS_ACTION_PAGINATION_PARAMS = {
         readonly: true,
         required: false,
         get({ entity, ctx }: FieldHookCallback) {
-          return ctx.call('records.findOne', {
-            query: {
-              fosteredAnimalId: entity.id,
-              type: RecordType.MARKING,
-            },
-            sort: '-createdAt',
-          });
+          return findLatestMarkingRecord(ctx, { fosteredAnimal: entity.id });
         },
       },
       obtainmentRecord: {
@@ -303,6 +298,7 @@ export default class FosteredAnimalsService extends moleculer.Service {
       municipality: 'any',
       markingNumber: 'string|optional',
       markingType: 'number|convert|optional',
+      markingCertificateNo: 'string|optional',
       acquireType: 'string',
       date: 'string',
       vetExaminationDate: 'string|optional',
@@ -326,6 +322,7 @@ export default class FosteredAnimalsService extends moleculer.Service {
         fosteredAnimal: fosteredAnimal?.id,
         markingNumber: ctx.params.markingNumber,
         markingType: ctx.params.markingType,
+        markingCertificateNo: ctx.params.markingCertificateNo,
       });
     }
 
@@ -348,7 +345,8 @@ export default class FosteredAnimalsService extends moleculer.Service {
         file: ctx.params.files,
       });
     }
-    return this.findEntity(ctx, { id: fosteredAnimal.id });
+    // `findEntity` id parametro nepaiso ir grąžintų pirmą naudotojo globojamą gyvūną.
+    return this.resolveEntities(ctx, { id: fosteredAnimal.id });
   }
 
   @Method

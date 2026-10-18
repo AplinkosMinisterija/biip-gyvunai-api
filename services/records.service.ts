@@ -181,6 +181,10 @@ export type Record<
       note: 'string',
       deathReason: 'string',
       markingNumber: 'string',
+      // AAD sprendimas (#85, 12 kl.): kiekvienas ženklinimas turi savo pažymos numerį.
+      markingCertificateNo: 'string',
+      // AAD sprendimas (#85, 13 kl.): vakcinos pavadinimas, neprivalomas.
+      vaccineName: 'string',
       markingType: {
         type: 'number',
         columnType: 'integer',
@@ -300,6 +304,8 @@ export default class RecordsService extends moleculer.Service {
       acquireDate: 'string|optional',
       municipality: 'object|optional',
       transferRecipient: 'object|optional',
+      vaccineName: 'string|optional',
+      markingCertificateNo: 'string|optional',
     },
   })
   async newRecord(ctx: Context<any>) {

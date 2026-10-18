@@ -5,6 +5,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { findLatestMarkingRecord } from '../modules/markingRecord';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -174,13 +175,7 @@ export type Animal<
         virtual: true,
         readonly: true,
         get({ entity, ctx }: FieldHookCallback) {
-          return ctx.call('records.findOne', {
-            query: {
-              animal: entity.id,
-              type: RecordType.MARKING,
-            },
-            sort: '-createdAt',
-          });
+          return findLatestMarkingRecord(ctx, { animal: entity.id });
         },
       },
       ...COMMON_FIELDS,
@@ -231,6 +226,7 @@ export default class AnimalsService extends moleculer.Service {
       certificate: 'string|optional',
       markingType: 'number|optional',
       markingNumber: 'string|optional',
+      markingCertificateNo: 'string|optional',
       acquiredFrom: 'object|optional',
       acquireDate: 'string|optional',
     },
@@ -273,6 +269,7 @@ export default class AnimalsService extends moleculer.Service {
         numberOfAnimals: 1,
         markingNumber: ctx.params.markingNumber,
         markingType: ctx.params.markingType,
+        markingCertificateNo: ctx.params.markingCertificateNo,
         animal: animal.id,
         species: animal.species,
         permit: animal.permit,
