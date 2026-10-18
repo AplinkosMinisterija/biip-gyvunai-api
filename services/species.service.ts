@@ -8,6 +8,7 @@ import ProfileMixin from '../mixins/profile.mixin';
 import { isSpeciesAllowedByPermit } from '../modules/permitValidation';
 import {
   OUTGOING_RECORD_TYPES,
+  amountByUnits,
   calculateGroupAmount,
   calculateIndividualAmount,
 } from '../modules/speciesAmount';
@@ -25,6 +26,7 @@ import {
   GroupByType,
   RestrictionType,
   Table,
+  Units,
   handleFormatResponse,
   isAdmin,
 } from '../types';
@@ -45,11 +47,6 @@ export enum PossesionType {
 export enum AccountingType {
   INDIVIDUAL = 'INDIVIDUAL',
   GROUP = 'GROUP',
-}
-
-export enum Units {
-  UNIT = 'UNIT',
-  KG = 'KG',
 }
 
 interface Fields extends CommonFields {
@@ -285,7 +282,7 @@ export default class SpeciesService extends moleculer.Service {
       aviary: 'string|optional',
       possessionType: 'string', // foster, with permit
       type: 'string',
-      units: 'string|optional',
+      units: { type: 'string', enum: Object.values(Units), optional: true },
       certificateNumber: 'string|optional',
       address: 'string|optional',
       municipality: 'any|optional',
@@ -412,16 +409,27 @@ export default class SpeciesService extends moleculer.Service {
       currentSpecies: Species<'speciesClassifier' | 'permit'>,
       groupByKey: string,
     ) => {
+      const { count, countKg } = amountByUnits(currentSpecies);
+
       if (!isGroupByMunicipalityAndSpeciesClassifier) {
         const { name, nameLatin, id, type } = currentSpecies.speciesClassifier;
         if (!species[groupByKey].speciesClassifier[id]) {
-          species[groupByKey].speciesClassifier[id] = { name, nameLatin, id, type, count: 0 };
+          species[groupByKey].speciesClassifier[id] = {
+            name,
+            nameLatin,
+            id,
+            type,
+            count: 0,
+            countKg: 0,
+          };
         }
-        species[groupByKey].speciesClassifier[id].count += currentSpecies.amount;
+        species[groupByKey].speciesClassifier[id].count += count;
+        species[groupByKey].speciesClassifier[id].countKg += countKg;
       }
 
       species[groupByKey].permitsCount.push(currentSpecies.permit.id);
-      species[groupByKey].count += currentSpecies.amount;
+      species[groupByKey].count += count;
+      species[groupByKey].countKg += countKg;
     };
 
     const formattedSpecies = Object.values(
@@ -443,6 +451,7 @@ export default class SpeciesService extends moleculer.Service {
             speciesClassifier,
             permitsCount: [],
             count: 0,
+            countKg: 0,
           };
         }
 

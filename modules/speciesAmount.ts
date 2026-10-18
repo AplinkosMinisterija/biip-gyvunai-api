@@ -1,4 +1,4 @@
-import { RecordType } from '../types';
+import { RecordType, Units } from '../types';
 
 // Įrašų tipai, didinantys rūšies gyvūnų skaičių leidime.
 export const INCOMING_RECORD_TYPES: RecordType[] = [RecordType.ACQUIREMENT, RecordType.BIRTH];
@@ -41,4 +41,13 @@ export const calculateIndividualAmount = (
   );
 
   return animalIds.filter((id) => !gone.has(Number(id))).length;
+};
+
+type SpeciesAmount = { units?: Units | null; amount?: number | null };
+
+// AAD sprendimas (#85, 14 kl.): kilogramais apskaitomos rūšys viešoje statistikoje rodomos
+// atskirai ir į vienetų sumą neįtraukiamos. Rūšis be nurodyto vieneto — vienetais.
+export const amountByUnits = ({ units, amount }: SpeciesAmount) => {
+  const value = amount ?? 0;
+  return units === Units.KG ? { count: 0, countKg: value } : { count: value, countKg: 0 };
 };

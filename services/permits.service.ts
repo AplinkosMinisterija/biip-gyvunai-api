@@ -15,6 +15,7 @@ import {
   isMunicipalityAccepted,
   isPermitIdentityChanged,
 } from '../modules/permitValidation';
+import { amountByUnits } from '../modules/speciesAmount';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -520,7 +521,13 @@ export default class PermitsService extends moleculer.Service {
     auth: RestrictionType.PUBLIC,
   })
   async generalStatistic(ctx: Context) {
-    const general = { aviariesCount: 0, zoosCount: 0, speciesCount: 0, speciesClassifiersCount: 0 };
+    const general = {
+      aviariesCount: 0,
+      zoosCount: 0,
+      speciesCount: 0,
+      speciesCountKg: 0,
+      speciesClassifiersCount: 0,
+    };
     const uniqueSpeciesClassifiers: { [key: string]: number } = {};
     const permits: Permit[] = await ctx.call('permits.find');
 
@@ -542,7 +549,9 @@ export default class PermitsService extends moleculer.Service {
 
     species.forEach((species) => {
       uniqueSpeciesClassifiers[species.speciesClassifier] = 1;
-      general.speciesCount += species.amount;
+      const { count, countKg } = amountByUnits(species);
+      general.speciesCount += count;
+      general.speciesCountKg += countKg;
     });
 
     general.speciesClassifiersCount = Object.keys(uniqueSpeciesClassifiers).length;

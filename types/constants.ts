@@ -139,6 +139,12 @@ export const COMMON_ACTION_PARAMS = {
   },
 };
 
+// Rūšies grupės dydžio apskaitos vienetai; seni įrašai be vieneto laikomi vienetais.
+export enum Units {
+  UNIT = 'UNIT',
+  KG = 'KG',
+}
+
 export const COMMON_DEFAULT_SCOPES = ['notDeleted'];
 export const COMMON_DELETED_SCOPES = ['-notDeleted', 'deleted'];
 
