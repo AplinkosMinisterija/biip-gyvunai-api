@@ -171,4 +171,57 @@ describe('permit deletion cascade (integration)', () => {
       [recordId, earlierRemovedRecordId].sort(),
     );
   });
+  describe('restore', () => {
+    const restore = (id: number, reason: string, meta: object = deletingAdminMeta()) =>
+      broker.call('permits.restorePermit', { id, reason }, { meta });
+
+    it('requires the right to delete permits and a reason', async () => {
+      await expect(restore(permitId, 'Klaidingai panaikintas', adminMeta())).rejects.toMatchObject({
+        code: 401,
+      });
+      await expect(restore(permitId, '   ')).rejects.toMatchObject({ code: 422 });
+    });
+
+    it('refuses to restore when an active permit with the same number exists', async () => {
+      const duplicate = await createPermitFixture({ permitNumber: 'DEL-CASCADE-1' });
+
+      await expect(restore(permitId, 'Klaidingai panaikintas')).rejects.toMatchObject({
+        code: 400,
+      });
+      await knex('permits').where({ id: duplicate }).delete();
+    });
+
+    it('restores the permit with the data deleted together with it', async () => {
+      await knex('species').where({ id: speciesId }).update({ amount: 999 });
+
+      await restore(permitId, 'Klaidingai panaikintas');
+
+      for (const [table, id] of [
+        ['permits', permitId],
+        ['species', speciesId],
+        ['animals', animalId],
+        ['records', recordId],
+        ['records', animalRecordId],
+        ['permitSpecies', permitSpeciesId],
+      ] as const) {
+        expect(await deletedAtOf(table, id)).toBeNull();
+      }
+      expect(await deletedAtOf('records', earlierRemovedRecordId)).toEqual(earlierRemovedAt);
+      expect((await knex('species').where({ id: speciesId }).first('amount')).amount).toBe(7);
+    });
+
+    it('records who restored the permit and why', async () => {
+      const history = await knex('permitHistories')
+        .where({ permitId })
+        .orderBy('id')
+        .select('type', 'restoreReason', 'createdBy');
+
+      expect(history.map(({ type }: { type: string }) => type)).toEqual(['DELETED', 'RESTORED']);
+      expect(history[1]).toMatchObject({ restoreReason: 'Klaidingai panaikintas', createdBy: 1 });
+    });
+
+    it('returns 404 for a permit that is not deleted', async () => {
+      await expect(restore(permitId, 'Dar kartą')).rejects.toMatchObject({ code: 404 });
+    });
+  });
 });

@@ -47,3 +47,56 @@ export const REMOVE_PERMIT_WITH_DATA_SQL = `
   )
   SELECT id FROM permit
 `;
+
+// AAD sprendimas (#85, 6 kl.): atstatomas leidimas ir tik tie jo duomenys, kurie panaikinti kartu
+// su juo (ta pačia data). Grąžinami atstatytų rūšių id, kad būtų perskaičiuotas jų kiekis.
+export const RESTORE_PERMIT_WITH_DATA_SQL = `
+  WITH permit AS (
+    SELECT id, deleted_at FROM permits
+    WHERE id = :permitId AND deleted_at IS NOT NULL
+    FOR UPDATE
+  ),
+  permit_species_ids AS (
+    SELECT s.id FROM species s JOIN permit ON s.permit_id = permit.id
+  ),
+  permit_animal_ids AS (
+    SELECT a.id FROM animals a, permit
+    WHERE a.permit_id = permit.id OR a.species_id IN (SELECT id FROM permit_species_ids)
+  ),
+  restored_permit AS (
+    UPDATE permits p
+    SET deleted_at = NULL, deleted_by = NULL
+    FROM permit
+    WHERE p.id = permit.id
+  ),
+  restored_species AS (
+    UPDATE species s
+    SET deleted_at = NULL, deleted_by = NULL
+    FROM permit
+    WHERE s.id IN (SELECT id FROM permit_species_ids) AND s.deleted_at = permit.deleted_at
+    RETURNING s.id
+  ),
+  restored_permit_species AS (
+    UPDATE permit_species ps
+    SET deleted_at = NULL, deleted_by = NULL
+    FROM permit
+    WHERE ps.permit_id = permit.id AND ps.deleted_at = permit.deleted_at
+  ),
+  restored_animals AS (
+    UPDATE animals a
+    SET deleted_at = NULL, deleted_by = NULL
+    FROM permit
+    WHERE a.id IN (SELECT id FROM permit_animal_ids) AND a.deleted_at = permit.deleted_at
+  ),
+  restored_records AS (
+    UPDATE records r
+    SET deleted_at = NULL, deleted_by = NULL
+    FROM permit
+    WHERE r.deleted_at = permit.deleted_at
+      AND (r.permit_id = permit.id
+           OR r.species_id IN (SELECT id FROM permit_species_ids)
+           OR r.animal_id IN (SELECT id FROM permit_animal_ids))
+  )
+  SELECT permit.id AS "permitId", restored_species.id AS "speciesId"
+  FROM permit LEFT JOIN restored_species ON true
+`;

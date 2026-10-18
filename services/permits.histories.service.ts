@@ -10,6 +10,7 @@ export const PermitHistoryTypes = {
   CREATED: 'CREATED',
   UPDATED: 'UPDATED',
   DELETED: 'DELETED',
+  RESTORED: 'RESTORED',
 };
 
 enum DeleteReasons {
@@ -62,6 +63,7 @@ enum DeleteReasons {
         enum: Object.values(DeleteReasons),
       },
       deleteOtherReason: 'string',
+      restoreReason: 'string',
       ...COMMON_FIELDS,
     },
     scopes: {
