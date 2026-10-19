@@ -5,6 +5,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { findLatestMarkingRecord } from '../modules/latestRecord';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -58,6 +59,9 @@ export type Animal<
   name: 'animals',
   mixins: [DbConnection(), ProfileMixin],
   settings: {
+    // Ryšiai su rūšimi, leidimu ir klasifikatoriumi užpildomi su scope: false — panaikinto
+    // leidimo duomenis AAD peržiūri tik skaitymui (#85, 5 kl.), o sujungto klasifikatoriaus
+    // pavadinimas neturi dingti.
     fields: {
       id: {
         type: 'string',
@@ -72,6 +76,7 @@ export type Animal<
         required: true,
         populate: {
           action: 'species.resolve',
+          params: { scope: false },
         },
       },
       permit: {
@@ -80,6 +85,7 @@ export type Animal<
         columnName: 'permitId',
         populate: {
           action: 'permits.resolve',
+          params: { scope: false },
         },
       },
       speciesClassifier: {
@@ -88,6 +94,7 @@ export type Animal<
         columnName: 'speciesClassifierId',
         populate: {
           action: 'speciesClassifiers.resolve',
+          params: { scope: false },
         },
       },
       gender: {
@@ -174,13 +181,7 @@ export type Animal<
         virtual: true,
         readonly: true,
         get({ entity, ctx }: FieldHookCallback) {
-          return ctx.call('records.findOne', {
-            query: {
-              animal: entity.id,
-              type: RecordType.MARKING,
-            },
-            sort: '-createdAt',
-          });
+          return findLatestMarkingRecord(ctx, { animal: entity.id });
         },
       },
       ...COMMON_FIELDS,
@@ -231,6 +232,7 @@ export default class AnimalsService extends moleculer.Service {
       certificate: 'string|optional',
       markingType: 'number|optional',
       markingNumber: 'string|optional',
+      markingCertificateNo: 'string|optional',
       acquiredFrom: 'object|optional',
       acquireDate: 'string|optional',
     },
@@ -273,6 +275,7 @@ export default class AnimalsService extends moleculer.Service {
         numberOfAnimals: 1,
         markingNumber: ctx.params.markingNumber,
         markingType: ctx.params.markingType,
+        markingCertificateNo: ctx.params.markingCertificateNo,
         animal: animal.id,
         species: animal.species,
         permit: animal.permit,
@@ -282,6 +285,19 @@ export default class AnimalsService extends moleculer.Service {
     }
 
     return this.resolveEntities(ctx, { id: animal.id });
+  }
+
+  // Kortelėje rodomas aktualus sertifikato Nr. (#85, 11 kl.) — jį nustato žurnalo įrašai, todėl
+  // atnaujinimo data nekeičiama: tai ne žmogaus atliktas kortelės pakeitimas.
+  @Action({
+    visibility: 'public',
+    params: { id: 'number', certificate: 'string' },
+  })
+  async setCurrentCertificate(ctx: Context<{ id: number; certificate: string }>) {
+    const adapter = await this.getAdapter(ctx);
+    await adapter.client('animals').where({ id: ctx.params.id }).update({
+      certificate: ctx.params.certificate,
+    });
   }
 
   @Method

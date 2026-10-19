@@ -4,13 +4,18 @@ import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Event, Method, Service } from 'moleculer-decorators';
 
 import PostgisMixin from 'moleculer-postgis';
-import DbConnection from '../mixins/database.mixin';
+import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import {
+  REMOVE_PERMIT_WITH_DATA_SQL,
+  RESTORE_PERMIT_WITH_DATA_SQL,
+} from '../modules/permitDeletion';
 import {
   PermitIdentity,
   isMunicipalityAccepted,
   isPermitIdentityChanged,
 } from '../modules/permitValidation';
+import { amountByUnits } from '../modules/speciesAmount';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -23,10 +28,13 @@ import {
   CommonPopulates,
   EntityChangedParams,
   FieldHookCallback,
+  PERMIT_FIELDS_EDITABLE_BY_HOLDER,
+  PERMIT_OWNERSHIP_FIELDS,
   RestrictionType,
   Table,
   throwBadRequestError,
   throwNoRightsError,
+  throwNotFoundError,
   throwValidationError,
 } from '../types';
 import { formatDateFrom, formatDateTo, handleFormatResponse, isAdmin } from '../types/functions';
@@ -244,6 +252,10 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
     defaultPopulates: ['issuer', 'geom'],
+    // ProfileMixin.beforeMutate: nuosavybė tikrinama pagal jsonb `users`,
+    // o turėtojas gali keisti tik aptvėrimo laukus.
+    ownershipByUsersColumn: true,
+    userEditableFields: PERMIT_FIELDS_EDITABLE_BY_HOLDER,
   },
   actions: {
     create: {
@@ -274,7 +286,9 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       count: 'beforeSelectPermit',
       get: 'beforeSelectPermit',
       all: 'beforeSelectPermit',
-      update: 'beforeUpdate',
+      update: ['beforeMutate', 'beforeUpdate'],
+      replace: 'beforeMutate',
+      remove: 'beforeMutate',
     },
   },
 })
@@ -332,30 +346,63 @@ export default class PermitsService extends moleculer.Service {
     >,
   ) {
     const { id, deleteReason, deleteOtherReason } = ctx.params;
-    const accesses = ctx?.meta?.authUser?.permissions?.NLG?.accesses ?? [];
-    const canRemovePermit = accesses.includes('*') || accesses.includes('DELETE_PERMITS');
+    this.assertCanDeletePermits(ctx);
 
-    if (!canRemovePermit) {
-      throwNoRightsError();
-    }
+    await this.removePermitWithData(ctx, id);
 
-    await ctx.call('permits.remove', {
-      id,
-    });
-
-    await this.createPermitHistory(
-      id,
-      ctx.meta,
-      PermitHistoryTypes.DELETED,
+    await this.createPermitHistory(id, ctx.meta, PermitHistoryTypes.DELETED, {
       deleteReason,
       deleteOtherReason,
-    );
+    });
 
     return id;
   }
 
+  // AAD sprendimas (#85, 6 kl.): atstatyti gali tik turintys teisę naikinti leidimus; priežastis
+  // privaloma ir išsaugoma istorijoje.
+  @Action({
+    rest: 'POST /:id/restore',
+    params: {
+      id: {
+        type: 'number',
+        convert: true,
+      },
+      reason: {
+        type: 'string',
+        trim: true,
+        empty: false,
+        max: 1000,
+      },
+    },
+    auth: RestrictionType.ADMIN,
+  })
+  async restorePermit(ctx: Context<{ id: number; reason: string }, UserAuthMeta>) {
+    const { id, reason } = ctx.params;
+    this.assertCanDeletePermits(ctx);
+
+    const permit: Permit = await this.resolveEntities(
+      ctx,
+      { id, scope: COMMON_DELETED_SCOPES },
+      { throwIfNotExist: true },
+    );
+    await this.assertPermitUnique(ctx, {
+      issueDate: permit.issueDate,
+      issuer: (permit.issuer as any)?.id ?? permit.issuer,
+      permitNumber: permit.permitNumber,
+    });
+
+    await this.restorePermitWithData(ctx, id);
+
+    await this.createPermitHistory(id, ctx.meta, PermitHistoryTypes.RESTORED, {
+      restoreReason: reason,
+    });
+
+    return this.resolveEntities(ctx, { id });
+  }
+
   @Action({
     rest: 'GET /deleted',
+    auth: RestrictionType.ADMIN,
   })
   listDeleted(ctx: Context<{}>) {
     return ctx.call('permits.list', {
@@ -371,7 +418,9 @@ export default class PermitsService extends moleculer.Service {
     ctx: Context<{ permitSpecies: PermitSpecies[]; id?: number }, UserAuthMeta>,
   ) {
     const id = ctx?.params?.id;
-    const permitSpecies = ctx?.params?.permitSpecies || [];
+    // Turėtojas leidime nurodytų rūšių nekeičia (žr. beforeUpdate).
+    const isHolderUpdate = !!id && !!this.buildAccessQuery(ctx.meta, true);
+    const permitSpecies = isHolderUpdate ? [] : ctx?.params?.permitSpecies || [];
 
     const uniqueFamilySpecies: any = {};
     const uniqueFamily: any = {};
@@ -404,7 +453,9 @@ export default class PermitsService extends moleculer.Service {
       ...ctx.params,
     });
 
-    await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+    if (!isHolderUpdate) {
+      await this.saveOrUpdateSpeciesForPermit(permit.id, permitSpecies);
+    }
 
     return ctx.call('permits.resolve', { id: permit.id });
   }
@@ -470,7 +521,13 @@ export default class PermitsService extends moleculer.Service {
     auth: RestrictionType.PUBLIC,
   })
   async generalStatistic(ctx: Context) {
-    const general = { aviariesCount: 0, zoosCount: 0, speciesCount: 0, speciesClassifiersCount: 0 };
+    const general = {
+      aviariesCount: 0,
+      zoosCount: 0,
+      speciesCount: 0,
+      speciesCountKg: 0,
+      speciesClassifiersCount: 0,
+    };
     const uniqueSpeciesClassifiers: { [key: string]: number } = {};
     const permits: Permit[] = await ctx.call('permits.find');
 
@@ -492,7 +549,9 @@ export default class PermitsService extends moleculer.Service {
 
     species.forEach((species) => {
       uniqueSpeciesClassifiers[species.speciesClassifier] = 1;
-      general.speciesCount += species.amount;
+      const { count, countKg } = amountByUnits(species);
+      general.speciesCount += count;
+      general.speciesCountKg += countKg;
     });
 
     general.speciesClassifiersCount = Object.keys(uniqueSpeciesClassifiers).length;
@@ -579,6 +638,54 @@ export default class PermitsService extends moleculer.Service {
     }
   }
 
+  // Leidimas naikinamas kartu su jo duomenimis vienu SQL sakiniu, todėl `permits.remove`
+  // nenaudojamas; įvykis „permits.removed“ (viešų rodinių atnaujinimui) siunčiamas atskirai.
+  @Method
+  async removePermitWithData(ctx: Context<unknown, UserAuthMeta>, permitId: number) {
+    const adapter = await this.getAdapter(ctx);
+    const { rows } = await adapter.client.raw(REMOVE_PERMIT_WITH_DATA_SQL, {
+      permitId,
+      userId: ctx.meta.user?.id ?? null,
+    });
+
+    if (!rows.length) {
+      throwNotFoundError('Permit not found');
+    }
+
+    await this.entityChanged('remove', { id: permitId }, null, ctx);
+  }
+
+  // Įvykis „permits.updated“ čia nesiunčiamas, nes jis istorijoje sukurtų dar ir UPDATED įrašą;
+  // vieši rodiniai atnaujinami tiesiogiai.
+  @Method
+  async restorePermitWithData(ctx: Context, permitId: number) {
+    const adapter = await this.getAdapter(ctx);
+    const { rows } = await adapter.client.raw(RESTORE_PERMIT_WITH_DATA_SQL, { permitId });
+
+    if (!rows.length) {
+      throwNotFoundError('Permit not found');
+    }
+
+    const speciesIds = rows
+      .map(({ speciesId }: { speciesId: number | null }) => speciesId)
+      .filter((speciesId: number | null) => speciesId !== null);
+    for (const speciesId of speciesIds) {
+      await ctx.call('species.recalculateAmount', { id: speciesId });
+    }
+
+    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
+    await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMITS_BY_CADASTRAL_IDS);
+  }
+
+  @Method
+  assertCanDeletePermits(ctx: Context<unknown, UserAuthMeta>) {
+    const accesses = ctx.meta?.authUser?.permissions?.NLG?.accesses ?? [];
+
+    if (!accesses.includes('*') && !accesses.includes('DELETE_PERMITS')) {
+      throwNoRightsError();
+    }
+  }
+
   @Method
   validateMunicipality({ value, entity }: FieldHookCallback) {
     if (isMunicipalityAccepted(value, entity?.municipality)) return true;
@@ -588,6 +695,16 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
+    if (this.buildAccessQuery(ctx.meta, true)) {
+      for (const field of PERMIT_OWNERSHIP_FIELDS) delete ctx.params[field];
+    }
+
+    // AAD sprendimas (#85, 3 kl.): leidimo dokumentas privalomas kuriant; seni leidimai be
+    // dokumento lieka redaguojami, todėl atnaujinant netikrinama.
+    if (!Array.isArray(ctx.params.file) || !ctx.params.file.length) {
+      throwValidationError('Permit file is required');
+    }
+
     await this.assertPermitUnique(ctx, {
       issueDate: ctx.params.issueDate,
       issuer: ctx.params.issuer,
@@ -743,13 +860,8 @@ export default class PermitsService extends moleculer.Service {
 
   @Method
   async beforeUpdate(ctx: Context<any, UserAuthMeta>) {
-    const existingPermit: Permit = await this.resolveEntities(ctx, {
-      id: ctx.params.id,
-      throwIfNotExist: true,
-    });
-    if (!existingPermit) {
-      return throwValidationError('Invalid permit');
-    }
+    // Leidimą (tik savininkui) suranda ir turėtojo keičiamus laukus palieka `beforeMutate`.
+    const existingPermit: Permit = ctx.locals.entity;
 
     // Tikrinama tik pakeitus numerį, išdavėją ar datą, kad seni pasikartojantys leidimai
     // liktų redaguojami kitais laukais.
@@ -779,19 +891,13 @@ export default class PermitsService extends moleculer.Service {
     permit: number | string,
     meta: any,
     type: string,
-    deleteReason?: DeleteReasons,
-    deleteOtherReason?: string,
+    reasons: {
+      deleteReason?: DeleteReasons;
+      deleteOtherReason?: string;
+      restoreReason?: string;
+    } = {},
   ) {
-    return this.broker.call(
-      'permits.histories.create',
-      {
-        permit,
-        deleteReason,
-        deleteOtherReason,
-        type,
-      },
-      { meta },
-    );
+    return this.broker.call('permits.histories.create', { permit, type, ...reasons }, { meta });
   }
 
   @Event()

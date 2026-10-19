@@ -3,7 +3,7 @@
 import moleculer, { Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
-import { RequestMessage, RestrictionType, throwNoRightsError } from '../types';
+import { RequestMessage, RestrictionType, isAdmin, throwNoRightsError } from '../types';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
 
@@ -171,6 +171,12 @@ export default class ApiService extends moleculer.Service {
   ): Promise<unknown> {
     const restrictionType = this.getRestrictionType(req);
 
+    // `scope` iš užklausos išjungia numatytąjį `notDeleted` filtrą — panaikintus įrašus
+    // per API mato tik administratoriai.
+    if (!isAdmin(ctx)) {
+      delete req.$params.scope;
+    }
+
     if (restrictionType === RestrictionType.PUBLIC) {
       return;
     }
@@ -178,10 +184,7 @@ export default class ApiService extends moleculer.Service {
     // Get the authenticated user.
     const authUser = ctx.meta.authUser;
 
-    if (
-      restrictionType === RestrictionType.ADMIN &&
-      ![AuthUserRole.ADMIN, AuthUserRole.SUPER_ADMIN].includes(authUser.type)
-    ) {
+    if (restrictionType === RestrictionType.ADMIN && !isAdmin(ctx)) {
       throw new ApiGateway.Errors.UnAuthorizedError('NO_RIGHTS', {
         error: 'Unauthorized',
       });

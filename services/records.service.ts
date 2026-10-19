@@ -6,7 +6,12 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import { AMOUNT_RECORD_TYPES, OUTGOING_RECORD_TYPES } from '../modules/speciesAmount';
+import { latestRecordByDate } from '../modules/latestRecord';
+import {
+  AMOUNT_RECORD_TYPES,
+  OUTGOING_RECORD_TYPES,
+  calculateGroupAmount,
+} from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -107,10 +112,21 @@ export type Record<
   F extends keyof (Fields & Populates) = keyof Fields,
 > = Table<Fields, Populates, P, F>;
 
+const throwInvalidNumberOfAnimals = () => {
+  throw new moleculer.Errors.MoleculerClientError(
+    'Invalid number of animals',
+    422,
+    'INVALID_NUMBER_OF_ANIMALS',
+  );
+};
+
 @Service({
   name: 'records',
   mixins: [DbConnection(), ProfileMixin],
   settings: {
+    // Ryšiai su leidimu, rūšimi, gyvūnu ir klasifikatoriumi užpildomi su scope: false — panaikinto
+    // leidimo duomenis AAD peržiūri tik skaitymui (#85, 5 kl.), o sujungto klasifikatoriaus
+    // pavadinimas neturi dingti.
     fields: {
       id: {
         type: 'string',
@@ -126,6 +142,7 @@ export type Record<
         required: false,
         populate: {
           action: 'animals.resolve',
+          params: { scope: false },
         },
       },
       permit: {
@@ -136,6 +153,7 @@ export type Record<
         required: false,
         populate: {
           action: 'permits.resolve',
+          params: { scope: false },
         },
       },
       species: {
@@ -146,6 +164,7 @@ export type Record<
         required: false,
         populate: {
           action: 'species.resolve',
+          params: { scope: false },
         },
       },
       fosteredAnimal: {
@@ -155,6 +174,7 @@ export type Record<
         required: false,
         populate: {
           action: 'fosteredAnimals.resolve',
+          params: { scope: false },
         },
       },
       speciesClassifier: {
@@ -164,6 +184,7 @@ export type Record<
         deepQuery: 'speciesClassifiers',
         populate: {
           action: 'speciesClassifiers.resolve',
+          params: { scope: false },
         },
       },
       type: {
@@ -181,6 +202,10 @@ export type Record<
       note: 'string',
       deathReason: 'string',
       markingNumber: 'string',
+      // AAD sprendimas (#85, 12 kl.): kiekvienas ženklinimas turi savo pažymos numerį.
+      markingCertificateNo: 'string',
+      // AAD sprendimas (#85, 13 kl.): vakcinos pavadinimas, neprivalomas.
+      vaccineName: 'string',
       markingType: {
         type: 'number',
         columnType: 'integer',
@@ -258,15 +283,15 @@ export type Record<
       count: ['beforeSelect', 'handleFilters'],
       get: ['beforeSelect', 'handleFilters'],
       all: ['beforeSelect', 'handleFilters'],
-      update: ['beforeMutate'],
-      replace: ['beforeMutate'],
-      remove: ['beforeMutate'],
+      update: ['beforeMutate', 'validateChangedNumberOfAnimals'],
+      replace: ['beforeMutate', 'validateChangedNumberOfAnimals'],
+      remove: ['beforeMutate', 'validateRemovedNumberOfAnimals'],
     },
     after: {
       // Perskaičiavimas pirmas: laiško siuntimo klaida neturi palikti pasenusio kiekio.
-      create: ['recalculateSpeciesAmount', 'afterCreate'],
-      update: ['recalculateSpeciesAmount'],
-      remove: ['recalculateSpeciesAmount'],
+      create: ['recalculateSpeciesAmount', 'syncCurrentCertificate', 'afterCreate'],
+      update: ['recalculateSpeciesAmount', 'syncCurrentCertificate'],
+      remove: ['recalculateSpeciesAmount', 'syncCurrentCertificate'],
     },
   },
   actions: {
@@ -300,6 +325,8 @@ export default class RecordsService extends moleculer.Service {
       acquireDate: 'string|optional',
       municipality: 'object|optional',
       transferRecipient: 'object|optional',
+      vaccineName: 'string|optional',
+      markingCertificateNo: 'string|optional',
     },
   })
   async newRecord(ctx: Context<any>) {
@@ -449,11 +476,73 @@ export default class RecordsService extends moleculer.Service {
     const count = numberOfAnimals ?? 0;
     const exceedsStock = OUTGOING_RECORD_TYPES.includes(type) && (species.amount ?? 0) - count < 0;
     if (count < 1 || exceedsStock) {
-      throw new moleculer.Errors.MoleculerClientError(
-        'Invalid number of animals',
-        422,
-        'INVALID_NUMBER_OF_ANIMALS',
-      );
+      throwInvalidNumberOfAnimals();
+    }
+  }
+
+  // Keičiant grupinės apskaitos įrašą likutis negali tapti neigiamas — kitaip administratorius,
+  // padidinęs nugaišusių ar sumažinęs įsigytų skaičių arba perkėlęs įrašą kitai rūšiai, galėjo
+  // nuvesti likutį į minusą. Tikrinama tik pasikeitus kiekiui, tipui ar rūšiai, kad seni
+  // įrašai liktų redaguojami kitais laukais.
+  @Method
+  async validateChangedNumberOfAnimals(ctx: Context<any, UserAuthMeta>) {
+    const previous: Record = ctx.locals.entity;
+    // Perduotas `null` irgi yra pakeitimas, todėl tikrinama `undefined`, ne `??`.
+    const paramOrPrevious = <K extends 'species' | 'type' | 'numberOfAnimals'>(
+      field: K,
+    ): Record[K] => (ctx.params[field] !== undefined ? ctx.params[field] : previous[field]);
+    const numberOfAnimals = paramOrPrevious('numberOfAnimals');
+    const next = {
+      species: paramOrPrevious('species'),
+      type: paramOrPrevious('type'),
+      numberOfAnimals: numberOfAnimals == null ? numberOfAnimals : Number(numberOfAnimals),
+    };
+    const isChanged =
+      Number(next.species) !== Number(previous.species) ||
+      next.type !== previous.type ||
+      next.numberOfAnimals !== previous.numberOfAnimals;
+
+    if (isChanged) await this.assertStockAfterChange(ctx, previous, next);
+    return ctx;
+  }
+
+  // Ištrynus įsigijimo ar gimimo įrašą, kai dalis gyvūnų jau išėjo, likutis taip pat taptų
+  // neigiamas.
+  @Method
+  async validateRemovedNumberOfAnimals(ctx: Context<any, UserAuthMeta>) {
+    await this.assertStockAfterChange(ctx, ctx.locals.entity);
+    return ctx;
+  }
+
+  // Grupinės apskaitos rūšies likutis po pakeitimo negali sumažėti žemiau nulio. Tikrinamas tik
+  // mažėjimas, kad jau neigiami seni duomenys netrukdytų jų taisyti.
+  @Method
+  async assertStockAfterChange(
+    ctx: Context<any, UserAuthMeta>,
+    previous: Partial<Record>,
+    next?: Pick<Record, 'species' | 'type' | 'numberOfAnimals'>,
+  ) {
+    const amountChanges = new Map<number, number>();
+    const addChange = (speciesId: number | undefined | null, change: number) => {
+      if (!speciesId) return;
+      const id = Number(speciesId);
+      amountChanges.set(id, (amountChanges.get(id) ?? 0) + change);
+    };
+    addChange(previous.species, -calculateGroupAmount([previous as Record]));
+    if (next) addChange(next.species, calculateGroupAmount([next]));
+
+    for (const [speciesId, change] of amountChanges) {
+      const species: Species = await ctx.call('species.resolve', { id: speciesId });
+      if (!species || species.type === AccountingType.INDIVIDUAL) continue;
+
+      const isAmountRecord =
+        !!next && speciesId === Number(next.species) && AMOUNT_RECORD_TYPES.includes(next.type);
+      if (
+        (isAmountRecord && (next.numberOfAnimals ?? 0) < 1) ||
+        (change < 0 && (species.amount ?? 0) + change < 0)
+      ) {
+        throwInvalidNumberOfAnimals();
+      }
     }
   }
 
@@ -492,6 +581,49 @@ export default class RecordsService extends moleculer.Service {
     });
 
     return animal?.species;
+  }
+
+  // AAD sprendimas (#85, 11 kl.): gyvūno ir globojamo gyvūno kortelėje rodomas naujausio
+  // „Sertifikato Nr.“ įrašo numeris. Skaičiuojama iš visų likusių įrašų, todėl atgaline data
+  // įvestas, pakeistas ar ištrintas įrašas palieka teisingą numerį; nelikus įrašų kortelės
+  // reikšmė nekeičiama. Rūšies (grupinės apskaitos) kortelė nesinchronizuojama.
+  @Method
+  async syncCurrentCertificate(ctx: Context<unknown, UserAuthMeta>, result: Record | number) {
+    const previous: Partial<Record> | undefined = ctx.locals.entity;
+    const current: Partial<Record> | undefined = typeof result === 'object' ? result : undefined;
+    const certificateRecords = [previous, current].filter(
+      (record) => record?.type === RecordType.CERTIFICATE_NO,
+    );
+
+    const animalIds = new Set(certificateRecords.map(({ animal }) => animal).filter(Boolean));
+    const fosteredIds = new Set(
+      certificateRecords.map(({ fosteredAnimal }) => fosteredAnimal).filter(Boolean),
+    );
+
+    for (const id of animalIds) {
+      await this.applyLatestCertificate(ctx, 'animals', id);
+    }
+    for (const id of fosteredIds) {
+      await this.applyLatestCertificate(ctx, 'fosteredAnimals', id);
+    }
+
+    return result;
+  }
+
+  // Įrašai imami be naudotojo filtro: numerį galėjo įvesti kitas to paties leidimo naudotojas.
+  @Method
+  async applyLatestCertificate(ctx: Context, service: 'animals' | 'fosteredAnimals', id: number) {
+    const owner = service === 'animals' ? { animal: id } : { fosteredAnimal: id };
+    const records: Record[] = await this.broker.call('records.find', {
+      query: { ...owner, type: RecordType.CERTIFICATE_NO },
+    });
+    const certificate = latestRecordByDate(records)?.certificateNo;
+    if (!certificate) return;
+
+    await ctx.call(`${service}.setCurrentCertificate`, {
+      id,
+      certificate,
+    });
   }
 
   @Method

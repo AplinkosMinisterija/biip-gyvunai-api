@@ -37,7 +37,10 @@ describe('species amount recalculation (integration)', () => {
   it('recalculates the amount before sending notification mail', () => {
     const hooks = broker.getLocalService('records').schema.hooks?.after as Record<string, string[]>;
 
-    expect(hooks.create).toEqual(['recalculateSpeciesAmount', 'afterCreate']);
+    expect(hooks.create).toContain('recalculateSpeciesAmount');
+    expect(hooks.create.indexOf('recalculateSpeciesAmount')).toBeLessThan(
+      hooks.create.indexOf('afterCreate'),
+    );
   });
 
   describe('group accounting species', () => {
