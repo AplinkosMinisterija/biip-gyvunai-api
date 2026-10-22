@@ -6,8 +6,7 @@ import { knex } from '../helpers/testBroker';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const migration = require('../../database/migrations/20261018130000_permitDeletionCascade.js');
 
-// Migracija perkuria viešą rodinį ir keičia visų panaikintų leidimų duomenis, todėl testas
-// vyksta transakcijoje, kuri pabaigoje atšaukiama.
+// Migracija perkuria viešą rodinį, todėl testas vyksta transakcijoje, kuri pabaigoje atšaukiama.
 let trx: Knex.Transaction;
 
 const insertId = (row: any) => Number(typeof row === 'object' ? row.id : row);
@@ -22,14 +21,12 @@ const insert = async (table: string, row: Record<string, unknown>): Promise<numb
 const deletedAtOf = async (table: string, id: number) =>
   (await trx(table).where({ id }).first('deletedAt')).deletedAt;
 
-describe('migration: cascade existing permit deletions and hide them publicly', () => {
+describe('migration: hide deleted permits from the public cadastral search', () => {
   const permitDeletedAt = new Date('2026-02-01T08:00:00Z');
   const earlierDeletedAt = new Date('2026-01-01T08:00:00Z');
   let deletedPermit: number;
-  let activePermit: number;
   let deletedPermitChildren: [string, number][];
   let earlierDeletedRecord: number;
-  let activeSpecies: number;
 
   const permit = (permitNumber: string, deletedAt: Date | null) =>
     insert('permits', {
@@ -73,13 +70,7 @@ describe('migration: cascade existing permit deletions and hide them publicly', 
       deletedAt: earlierDeletedAt,
     });
 
-    activePermit = await permit('MIG-ACT-1', null);
-    activeSpecies = await insert('species', {
-      permitId: activePermit,
-      speciesClassifierId: 1,
-      possessionType: 'WITH_PERMIT',
-      type: 'GROUP',
-    });
+    await permit('MIG-ACT-1', null);
 
     await migration.up(trx);
   });
@@ -89,18 +80,11 @@ describe('migration: cascade existing permit deletions and hide them publicly', 
     await knex.destroy();
   });
 
-  it('marks the children of a deleted permit deleted with the permit date', async () => {
+  it('keeps the data of a deleted permit, its animals stay until transferred', async () => {
     for (const [table, id] of deletedPermitChildren) {
-      expect(await deletedAtOf(table, id)).toEqual(permitDeletedAt);
+      expect(await deletedAtOf(table, id)).toBeNull();
     }
-  });
-
-  it('keeps an earlier deletion date', async () => {
     expect(await deletedAtOf('records', earlierDeletedRecord)).toEqual(earlierDeletedAt);
-  });
-
-  it('leaves the data of active permits alone', async () => {
-    expect(await deletedAtOf('species', activeSpecies)).toBeNull();
   });
 
   it('shows only active permits in the public cadastral search', async () => {
