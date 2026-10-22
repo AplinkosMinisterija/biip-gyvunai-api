@@ -147,6 +147,7 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
     DbConnection(),
     PostgisMixin({
       srid: 3346,
+      geojson: { maxDecimalDigits: 2 },
     }),
     ProfileMixin,
   ],
