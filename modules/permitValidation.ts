@@ -54,6 +54,10 @@ export const isSpeciesAllowedByPermit = (
 export const normalizeClassifierName = (value?: string) =>
   (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-// SQL atitikmuo `normalizeClassifierName` (stulpelio pavadinimas — tik iš kodo, ne iš naudotojo).
-export const normalizedColumnSql = (column: 'name' | 'name_latin') =>
-  `lower(btrim(regexp_replace(${column}, '\\s+', ' ', 'g')))`;
+// SQL atitikmuo `normalizeClassifierName`. PostgreSQL `[[:space:]]` neapima kai kurių tarpų,
+// kuriuos JS `\s` laiko tarpais (chr(160), chr(8199), chr(8239), chr(65279)), todėl jie
+// pridedami atskirai. Ta pati išraiška yra unikaliame indekse (migracija 20261026120100),
+// todėl abi lyginamos pusės normalizuojamos SQL'e.
+// Argumentas — stulpelio pavadinimas arba `?`, ne naudotojo tekstas.
+export const normalizedSql = (expression: 'name' | 'name_latin' | '?') =>
+  `lower(btrim(regexp_replace(${expression}, '[[:space:]' || chr(160) || chr(8199) || chr(8239) || chr(65279) || ']+', ' ', 'g')))`;
