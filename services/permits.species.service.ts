@@ -82,7 +82,7 @@ export default class PermitSpeciesService extends moleculer.Service {
     ctx: Context<{ id: number; species: number; family: number; permit: number }>,
   ) {
     const { family, species, permit } = ctx.params;
-    let { id } = ctx.params;
+    let id: number | undefined = ctx.params.id;
     if (family && permit) {
       const query: any = { family, permit };
 
@@ -94,7 +94,10 @@ export default class PermitSpeciesService extends moleculer.Service {
         query,
       });
 
-      id = permitSpecies?.id;
+      // Rasta ta pati eilutė — keisti nėra ko, todėl `updatedAt` nekeičiamas (#85, 30 kl.).
+      if (permitSpecies) return permitSpecies;
+
+      id = undefined;
     }
 
     if (!id) {

@@ -185,6 +185,8 @@ export type Animal<
         },
       },
       ...COMMON_FIELDS,
+      // AAD sprendimas (#85, 15 ir 30 kl.): sąrašuose rodoma atnaujinimo data (tik žmogaus pakeitimai).
+      updatedAt: { ...COMMON_FIELDS.updatedAt, hidden: false },
     },
     scopes: {
       ...COMMON_SCOPES,
