@@ -3,6 +3,7 @@
 import moleculer, { Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
+import { stripClientRaw } from '../modules/sanitizeClientParams';
 import { RequestMessage, RestrictionType, throwNoRightsError } from '../types';
 import { Tenant } from './tenants.service';
 import { User } from './users.service';
@@ -42,12 +43,16 @@ export enum AuthUserRole {
     routes: [
       {
         path: '',
+        // Removes client-supplied `$raw` (raw SQL) from params.
+        onBeforeCall: stripClientRaw,
         aliases: {
           'GET /ping': 'api.ping',
         },
       },
       {
         path: '/api',
+        // Removes client-supplied `$raw` (raw SQL) from params.
+        onBeforeCall: stripClientRaw,
         whitelist: [
           // Access to any actions in all services under "/api" URL
           '**',
