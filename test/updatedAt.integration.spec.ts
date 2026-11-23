@@ -48,7 +48,13 @@ describe('updatedAt shows human changes only (integration)', () => {
 
     await broker.call(
       'records.newRecord',
-      { species: species.id, type: 'ACQUIREMENT', date: '2026-01-10', numberOfAnimals: 4 },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: species.id,
+        type: 'ACQUIREMENT',
+        date: '2026-01-10',
+        numberOfAnimals: 4,
+      },
       { meta: adminMeta() },
     );
 

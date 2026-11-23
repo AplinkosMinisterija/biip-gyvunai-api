@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { findLatestMarkingRecord } from '../modules/latestRecord';
+import { resolveLateness } from '../modules/recordLateness';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -237,9 +238,18 @@ export default class AnimalsService extends moleculer.Service {
       markingCertificateNo: 'string|optional',
       acquiredFrom: 'object|optional',
       acquireDate: 'string|optional',
+      lateReason: 'string|optional',
     },
   })
   async newAnimal(ctx: Context<any>) {
+    // Registracijos įvykis — įsigijimas, o neįsigyto gyvūno — gimimas. Jis vertinamas dar
+    // prieš sukuriant gyvūną, kad vėluojant be priežasties neliktų gyvūno be įrašų (#85, 25 kl.).
+    const acquired = !!(ctx.params.acquiredFrom && ctx.params.acquireDate);
+    const lateness = resolveLateness(
+      acquired ? ctx.params.acquireDate : ctx.params.birthDate,
+      ctx.params.lateReason,
+    );
+
     const animal = await this.createEntity(ctx);
     await ctx.call('species.recalculateAmount', { id: animal.species });
     if (ctx.params.birthDate) {
@@ -253,6 +263,7 @@ export default class AnimalsService extends moleculer.Service {
         permit: animal.permit,
         user: animal.user,
         tenant: animal.tenant,
+        ...(acquired ? {} : lateness),
       });
     }
     if (ctx.params.acquiredFrom && ctx.params.acquireDate) {
@@ -267,6 +278,7 @@ export default class AnimalsService extends moleculer.Service {
         user: animal.user,
         tenant: animal.tenant,
         file: ctx.params.file,
+        ...lateness,
       });
     }
     if (ctx.params.markingNumber && ctx.params.markingType) {

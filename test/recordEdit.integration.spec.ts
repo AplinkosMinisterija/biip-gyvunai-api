@@ -16,6 +16,8 @@ const STRANGER = 6;
 const meta = userMeta({ userId: OWNER });
 const strangerMeta = userMeta({ userId: STRANGER });
 const daysAgo = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
+const THREE_DAYS_AGO = daysAgo(3);
+const TWO_DAYS_AGO = daysAgo(2);
 
 type RecordRow = { id: number; type: string; note?: string; numberOfAnimals?: number };
 
@@ -81,12 +83,12 @@ describe('correcting journal records (integration)', () => {
       type: 'TREATMENT',
       numberOfAnimals: 1,
       note: 'Gydytas',
-      date: '2026-11-20T00:00:00.000Z',
+      date: THREE_DAYS_AGO,
     });
 
     const edited = await edit(record.id, {
       note: 'Gydytas nuo parazitų',
-      date: '2026-11-21T00:00:00.000Z',
+      date: TWO_DAYS_AGO,
       reason: '  Netiksli data  ',
     });
 
@@ -95,7 +97,7 @@ describe('correcting journal records (integration)', () => {
     expect(history).toMatchObject({ type: 'UPDATED', reason: 'Netiksli data', createdBy: OWNER });
     expect(history.changes).toEqual({
       note: { old: 'Gydytas', new: 'Gydytas nuo parazitų' },
-      date: { old: '2026-11-20T00:00:00.000Z', new: '2026-11-21T00:00:00.000Z' },
+      date: { old: THREE_DAYS_AGO, new: TWO_DAYS_AGO },
     });
 
     const listed = (await broker.call('records.getHistory', { id: record.id }, { meta })) as {
@@ -127,14 +129,14 @@ describe('correcting journal records (integration)', () => {
       type: 'MARKING',
       markingNumber: 'Z-1',
       markingType,
-      markingDate: '2026-11-20T00:00:00.000Z',
+      markingDate: THREE_DAYS_AGO,
     });
 
     // Ženklinimo būdas grąžinamas užpildytas, bet lyginamas pagal id.
     await edit(marking.id, {
       markingType,
       markingNumber: 'Z-1',
-      markingDate: '2026-11-20T00:00:00.000Z',
+      markingDate: THREE_DAYS_AGO,
     });
     expect(await historyOf(marking.id)).toEqual([]);
 

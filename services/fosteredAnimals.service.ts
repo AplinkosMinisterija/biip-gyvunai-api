@@ -7,6 +7,7 @@ import Moleculer from 'moleculer';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { findLatestMarkingRecord } from '../modules/latestRecord';
+import { resolveLateness } from '../modules/recordLateness';
 import {
   COMMON_ACTION_PARAMS,
   COMMON_DEFAULT_SCOPES,
@@ -303,9 +304,15 @@ export default class FosteredAnimalsService extends moleculer.Service {
       date: 'string',
       vetExaminationDate: 'string|optional',
       files: 'any',
+      lateReason: 'string|optional',
     },
   })
   async newFosteredAnimal(ctx: Context<any>) {
+    // Registracijos įvykis — paėmimas globai ar radimas gamtoje (#85, 25 kl.).
+    const lateness = ['ACQUIRED', 'FOUND'].includes(ctx.params.acquireType)
+      ? resolveLateness(ctx.params.date, ctx.params.lateReason)
+      : {};
+
     const fosteredAnimal = await this.createEntity(ctx);
     if (!fosteredAnimal) {
       throw new Moleculer.Errors.MoleculerClientError(
@@ -333,6 +340,7 @@ export default class FosteredAnimalsService extends moleculer.Service {
         fosteredAnimal: fosteredAnimal.id,
         date: ctx.params.date,
         file: ctx.params.files,
+        ...lateness,
       });
     }
     if (ctx.params.acquireType === 'FOUND') {
@@ -343,6 +351,7 @@ export default class FosteredAnimalsService extends moleculer.Service {
         date: ctx.params.date,
         vetExaminationDate: ctx.params.vetExaminationDate,
         file: ctx.params.files,
+        ...lateness,
       });
     }
     // `findEntity` id parametro nepaiso ir grąžintų pirmą naudotojo globojamą gyvūną.

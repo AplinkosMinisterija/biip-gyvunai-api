@@ -8,6 +8,7 @@ import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { latestRecordByDate } from '../modules/latestRecord';
 import { diffRecord, RECORD_DATE_FIELDS, RecordEditableField } from '../modules/recordChanges';
+import { isLateEventDate, recordEventDate, resolveLateness } from '../modules/recordLateness';
 import {
   AMOUNT_RECORD_TYPES,
   calculateGroupAmount,
@@ -20,6 +21,7 @@ import {
   CommonFields,
   CommonPopulates,
   Gender,
+  isAdmin,
   RecordType,
   Table,
 } from '../types';
@@ -101,6 +103,8 @@ interface Fields extends CommonFields {
   annulledAt: Date;
   annulledBy: User['id'];
   annulReason: string;
+  isLate: boolean;
+  lateReason: string;
 }
 
 interface Populates extends CommonPopulates {
@@ -116,6 +120,9 @@ export type Record<
   P extends keyof Populates = never,
   F extends keyof (Fields & Populates) = keyof Fields,
 > = Table<Fields, Populates, P, F>;
+
+// Servisai, kurie registruodami gyvūną patys nustato įrašo vėlavimą.
+const LATENESS_SET_BY_CALLER = ['animals', 'fosteredAnimals'];
 
 const throwInvalidNumberOfAnimals = () => {
   throw new moleculer.Errors.MoleculerClientError(
@@ -283,6 +290,14 @@ const throwInvalidNumberOfAnimals = () => {
         type: 'string',
         readonly: true,
       },
+      // AAD sprendimai (#85, 25 kl., 34 kl. a): vėliau nei per 7 d. nuo įvykio įvestas ar
+      // laikytojo patikslintas įrašas visam laikui pažymimas. Abu laukus nustato tik serveris
+      // (`beforeCreate`, `edit`), kliento reikšmės perrašomos.
+      isLate: {
+        type: 'boolean',
+        default: false,
+      },
+      lateReason: 'string',
       ...COMMON_FIELDS,
     },
     scopes: {
@@ -368,6 +383,7 @@ export default class RecordsService extends moleculer.Service {
       transferRecipient: 'object|optional',
       vaccineName: 'string|optional',
       markingCertificateNo: 'string|optional',
+      lateReason: 'string|optional',
     },
   })
   async newRecord(ctx: Context<any>) {
@@ -504,9 +520,19 @@ export default class RecordsService extends moleculer.Service {
     }
 
     // Įrašoma ta pati (sutvarkyta) reikšmė, kuri saugoma istorijoje.
+    // Laikytojo patikslintas įrašas, kai nuo įvykio praėjo daugiau nei 7 d., pažymimas
+    // vėluojančiu (#85, 25 kl.); priežastis — taisymo priežastis. AAD taisymai jo nežymi.
+    const changed = Object.fromEntries(changedFields.map((field) => [field, changes[field].new]));
+    const markLate =
+      !isAdmin(ctx) &&
+      !record.isLate &&
+      (isLateEventDate(recordEventDate(record)) ||
+        isLateEventDate(recordEventDate({ ...record, ...changed })));
+
     const updated: Record = await this.updateEntity(ctx, {
       id: record.id,
-      ...Object.fromEntries(changedFields.map((field) => [field, changes[field].new])),
+      ...changed,
+      ...(markLate ? { isLate: true } : {}),
     });
 
     await this.createRecordHistory(
@@ -594,6 +620,22 @@ export default class RecordsService extends moleculer.Service {
     return ctx;
   }
 
+  // Žurnale įvedamo įrašo įvykio data privaloma (kaip išorinės sistemos formoje), kitaip
+  // vėlavimo patikra būtų apeinama. Data neprivaloma tik įrašui „Kita“.
+  @Method
+  requireEventDate(params: Partial<Record>) {
+    const eventDate = recordEventDate(params);
+    if (!eventDate && params.type === RecordType.OTHER) return eventDate;
+    if (!eventDate || Number.isNaN(new Date(eventDate).getTime())) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'A valid event date is required',
+        422,
+        'INVALID_DATE',
+      );
+    }
+    return eventDate;
+  }
+
   @Method
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
     let entityTenant;
@@ -672,6 +714,19 @@ export default class RecordsService extends moleculer.Service {
           error: 'Unauthorized',
         });
       }
+    }
+
+    // Gyvūną registruojantis servisas vėlavimą nustato pats pagal registracijos įvykį
+    // (įsigijimą ar gimimą): kartu kuriami kiti įrašai (pvz. įsigyto gyvūno gimimas) nėra
+    // laikytojo įvykiai. `ctx.caller` klientas per API nustatyti negali.
+    if (LATENESS_SET_BY_CALLER.includes(ctx.caller)) {
+      ctx.params.isLate = ctx.params.isLate === true;
+      ctx.params.lateReason = ctx.params.isLate ? ctx.params.lateReason : null;
+    } else {
+      Object.assign(
+        ctx.params,
+        resolveLateness(this.requireEventDate(ctx.params), ctx.params.lateReason),
+      );
     }
 
     ctx.params.tenant = ctx.meta.profile;

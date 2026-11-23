@@ -49,12 +49,22 @@ describe('record vaccine name, marking certificate and current marking (integrat
   });
 
   const newRecord = (params: Record<string, unknown>) =>
-    broker.call('records.newRecord', params, { meta }) as Promise<{ id: number }>;
+    broker.call(
+      'records.newRecord',
+      { lateReason: 'Įvestas vėliau (testas)', ...params },
+      { meta },
+    ) as Promise<{ id: number }>;
 
   const newAnimal = (params: Record<string, unknown> = {}) =>
     broker.call(
       'animals.newAnimal',
-      { species: individualSpecies, gender: 'MALE', birthDate: '2025-01-01', ...params },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: individualSpecies,
+        gender: 'MALE',
+        birthDate: '2025-01-01',
+        ...params,
+      },
       { meta },
     ) as Promise<{ id: number }>;
 
@@ -158,6 +168,7 @@ describe('record vaccine name, marking certificate and current marking (integrat
     const fostered = (await broker.call(
       'fosteredAnimals.newFosteredAnimal',
       {
+        lateReason: 'Įvestas vėliau (testas)',
         speciesClassifier: classifier,
         gender: 'FEMALE',
         address: 'Testo g. 1',
@@ -238,6 +249,7 @@ describe('record vaccine name, marking certificate and current marking (integrat
       const fostered = (await broker.call(
         'fosteredAnimals.newFosteredAnimal',
         {
+          lateReason: 'Įvestas vėliau (testas)',
           speciesClassifier: classifier,
           gender: 'MALE',
           address: 'Testo g. 2',

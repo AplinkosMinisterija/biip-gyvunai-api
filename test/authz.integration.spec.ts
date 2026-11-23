@@ -40,14 +40,24 @@ describe('ownership on update/remove (integration)', () => {
 
     const animal: { id: number } = await broker.call(
       'animals.newAnimal',
-      { species: speciesId, gender: 'MALE', birthDate: '2025-05-05' },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: speciesId,
+        gender: 'MALE',
+        birthDate: '2025-05-05',
+      },
       { meta: userMeta({ userId: OWNER }) },
     );
     animalId = animal.id;
 
     const record: { id: number } = await broker.call(
       'records.newRecord',
-      { animal: animalId, type: 'VACCINATION', date: '2026-02-02' },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        animal: animalId,
+        type: 'VACCINATION',
+        date: '2026-02-02',
+      },
       { meta: userMeta({ userId: OWNER }) },
     );
     recordId = record.id;
@@ -155,7 +165,13 @@ describe('reference fields are frozen for non-admin updates (integration)', () =
 
     const record: { id: number } = await broker.call(
       'records.newRecord',
-      { species: ownSpeciesId, type: 'ACQUIREMENT', date: '2026-03-01', numberOfAnimals: 5 },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: ownSpeciesId,
+        type: 'ACQUIREMENT',
+        date: '2026-03-01',
+        numberOfAnimals: 5,
+      },
       { meta },
     );
     recordId = record.id;
@@ -172,7 +188,12 @@ describe('reference fields are frozen for non-admin updates (integration)', () =
     );
     const animal: { id: number } = await broker.call(
       'animals.newAnimal',
-      { species: individual.id, gender: 'MALE', birthDate: '2025-05-05' },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: individual.id,
+        gender: 'MALE',
+        birthDate: '2025-05-05',
+      },
       { meta },
     );
     animalId = animal.id;

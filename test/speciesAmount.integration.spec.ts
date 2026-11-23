@@ -59,7 +59,13 @@ describe('species amount recalculation (integration)', () => {
     it('newRecord returns the created record', async () => {
       const record: { id: number; type: string } = await broker.call(
         'records.newRecord',
-        { species: speciesId, type: 'ACQUIREMENT', date: '2026-01-10', numberOfAnimals: 10 },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          type: 'ACQUIREMENT',
+          date: '2026-01-10',
+          numberOfAnimals: 10,
+        },
         { meta: adminMeta() },
       );
 
@@ -71,7 +77,13 @@ describe('species amount recalculation (integration)', () => {
     it('sums records of all users, not only the current one', async () => {
       await broker.call(
         'records.newRecord',
-        { species: speciesId, type: 'DEATH', date: '2026-01-11', numberOfAnimals: 2 },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          type: 'DEATH',
+          date: '2026-01-11',
+          numberOfAnimals: 2,
+        },
         { meta: member() },
       );
 
@@ -81,13 +93,25 @@ describe('species amount recalculation (integration)', () => {
     it('subtracts transfers and releases', async () => {
       const transfer: { id: number } = await broker.call(
         'records.newRecord',
-        { species: speciesId, type: 'TRANSFER', date: '2026-01-12', numberOfAnimals: 3 },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          type: 'TRANSFER',
+          date: '2026-01-12',
+          numberOfAnimals: 3,
+        },
         { meta: member() },
       );
       transferId = transfer.id;
       await broker.call(
         'records.newRecord',
-        { species: speciesId, type: 'RELEASE', date: '2026-01-13', numberOfAnimals: 1 },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          type: 'RELEASE',
+          date: '2026-01-13',
+          numberOfAnimals: 1,
+        },
         { meta: member() },
       );
 
@@ -104,7 +128,13 @@ describe('species amount recalculation (integration)', () => {
       await expect(
         broker.call(
           'records.newRecord',
-          { species: speciesId, type: 'DEATH', date: '2026-01-14', numberOfAnimals: 100 },
+          {
+            lateReason: 'Įvestas vėliau (testas)',
+            species: speciesId,
+            type: 'DEATH',
+            date: '2026-01-14',
+            numberOfAnimals: 100,
+          },
           { meta: member() },
         ),
       ).rejects.toMatchObject({ code: 422, type: 'INVALID_NUMBER_OF_ANIMALS' });
@@ -114,7 +144,12 @@ describe('species amount recalculation (integration)', () => {
       await expect(
         broker.call(
           'records.newRecord',
-          { species: speciesId, type: 'ACQUIREMENT', date: '2026-01-15' },
+          {
+            lateReason: 'Įvestas vėliau (testas)',
+            species: speciesId,
+            type: 'ACQUIREMENT',
+            date: '2026-01-15',
+          },
           { meta: member() },
         ),
       ).rejects.toMatchObject({ code: 422, type: 'INVALID_NUMBER_OF_ANIMALS' });
@@ -123,7 +158,12 @@ describe('species amount recalculation (integration)', () => {
     it('accepts a neutral record without a count and keeps the amount', async () => {
       await broker.call(
         'records.newRecord',
-        { species: speciesId, type: 'VACCINATION', date: '2026-01-16' },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          type: 'VACCINATION',
+          date: '2026-01-16',
+        },
         { meta: member() },
       );
 
@@ -153,12 +193,22 @@ describe('species amount recalculation (integration)', () => {
     it('counts registered animals', async () => {
       const first: { id: number } = await broker.call(
         'animals.newAnimal',
-        { species: speciesId, gender: 'MALE', birthDate: '2025-01-01' },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          gender: 'MALE',
+          birthDate: '2025-01-01',
+        },
         { meta: member() },
       );
       const second: { id: number } = await broker.call(
         'animals.newAnimal',
-        { species: speciesId, gender: 'FEMALE', birthDate: '2025-02-02' },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: speciesId,
+          gender: 'FEMALE',
+          birthDate: '2025-02-02',
+        },
         { meta: member() },
       );
       firstAnimalId = first.id;
@@ -171,7 +221,13 @@ describe('species amount recalculation (integration)', () => {
     it('excludes an animal with a death record', async () => {
       await broker.call(
         'records.newRecord',
-        { animal: firstAnimalId, type: 'DEATH', date: '2026-02-01', deathReason: 'FOUND_DEAD' },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          animal: firstAnimalId,
+          type: 'DEATH',
+          date: '2026-02-01',
+          deathReason: 'FOUND_DEAD',
+        },
         { meta: member() },
       );
 
