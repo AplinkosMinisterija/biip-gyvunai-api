@@ -250,6 +250,11 @@ export default class AnimalsService extends moleculer.Service {
       ctx.params.lateReason,
     );
 
+    // Įsigijimo dokumentų tipai (#85, 28 kl.) tikrinami taip pat iš anksto.
+    if (acquired) {
+      ctx.params.file = await ctx.call('records.validateFiles', { files: ctx.params.file });
+    }
+
     const animal = await this.createEntity(ctx);
     await ctx.call('species.recalculateAmount', { id: animal.species });
     if (ctx.params.birthDate) {

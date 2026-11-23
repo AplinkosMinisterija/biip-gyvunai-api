@@ -313,6 +313,11 @@ export default class FosteredAnimalsService extends moleculer.Service {
       ? resolveLateness(ctx.params.date, ctx.params.lateReason)
       : {};
 
+    // Dokumentų tipai (#85, 28 kl.) tikrinami prieš sukuriant globojamą gyvūną.
+    if (['ACQUIRED', 'FOUND'].includes(ctx.params.acquireType)) {
+      ctx.params.files = await ctx.call('records.validateFiles', { files: ctx.params.files });
+    }
+
     const fosteredAnimal = await this.createEntity(ctx);
     if (!fosteredAnimal) {
       throw new Moleculer.Errors.MoleculerClientError(

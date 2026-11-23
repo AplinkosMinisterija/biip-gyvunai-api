@@ -1,5 +1,6 @@
 'use strict';
 
+import { uniq } from 'lodash';
 import moleculer, { Context, RestSchema } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
 
@@ -27,6 +28,7 @@ import {
 } from '../types';
 import { Animal } from './animals.service';
 import { AuthUserRole, UserAuthMeta } from './api.service';
+import { DocumentTypeClassifier } from './documentTypeClassifiers.service';
 import { FosteredAnimal } from './fosteredAnimals.service';
 import { MarkingTypeClassifier } from './markingTypeClassifiers.service';
 import { Permit } from './permits.service';
@@ -77,7 +79,7 @@ interface Fields extends CommonFields {
   deathReason: DeathReason;
   markingNumber: string;
   markingType: MarkingTypeClassifier['id'];
-  file: any;
+  file: RecordFile[];
   acquiredFrom: {
     type: LegalForm;
     nationalityType: NationalityType;
@@ -123,6 +125,16 @@ export type Record<
 
 // Servisai, kurie registruodami gyvūną patys nustato įrašo vėlavimą.
 const LATENESS_SET_BY_CALLER = ['animals', 'fosteredAnimals'];
+
+// Prisegtas dokumentas. Tipo pavadinimas saugomas kartu, kad pervadinus ar pašalinus tipą
+// jau prisegtų dokumentų tipas nepasikeistų.
+export type RecordFile = {
+  name: string;
+  size?: number;
+  url: string;
+  type?: DocumentTypeClassifier['id'];
+  typeName?: string;
+};
 
 const throwInvalidNumberOfAnimals = () => {
   throw new moleculer.Errors.MoleculerClientError(
@@ -503,6 +515,10 @@ export default class RecordsService extends moleculer.Service {
       );
     }
 
+    if (ctx.params.file !== undefined) {
+      ctx.params.file = await this.applyFileTypes(ctx, ctx.params.file, record.file);
+    }
+
     const changes = diffRecord(record, ctx.params);
     // Kiekis taisomas tik grupinės apskaitos kiekį keičiančiame įraše — kitur jis nenaudojamas.
     if (changes.numberOfAnimals && !(await this.usesGroupAmount(ctx, record))) {
@@ -620,6 +636,58 @@ export default class RecordsService extends moleculer.Service {
     return ctx;
   }
 
+  // AAD sprendimai (#85, 10 kl. b, 28 ir 29 kl. a): prie kiekvieno prisegto dokumento
+  // nurodomas tipas iš AAD tvarkomo sąrašo. Jau prisegtas dokumentas paliekamas toks, koks
+  // buvo (ir anksčiau įkeltas be tipo — rodomas „Nenurodyta“), kol jo tipas nekeičiamas.
+  @Method
+  async applyFileTypes(
+    ctx: Context<unknown, UserAuthMeta>,
+    files: unknown,
+    previousFiles?: RecordFile[] | null,
+  ): Promise<RecordFile[] | null> {
+    if (files === null) return null;
+    if (!Array.isArray(files)) {
+      throw new moleculer.Errors.MoleculerClientError('Files must be a list', 422, 'INVALID_FILES');
+    }
+
+    const previousByUrl = new Map(
+      (Array.isArray(previousFiles) ? previousFiles : [])
+        .filter((file) => file?.url)
+        .map((file) => [file.url, file]),
+    );
+    const typeIds = uniq(files.map((file) => Number(file?.type)).filter(Boolean));
+    const types: DocumentTypeClassifier[] = typeIds.length
+      ? await ctx.call('documentTypeClassifiers.find', { query: { id: { $in: typeIds } } })
+      : [];
+    const typeNames = new Map(types.map(({ id, name }) => [Number(id), name]));
+
+    return files.map((file): RecordFile => {
+      const type = Number(file?.type) || undefined;
+      const previous = previousByUrl.get(file?.url);
+      if (previous && (Number(previous.type) || undefined) === type) return previous;
+
+      const typeName = type && typeNames.get(type);
+      if (!file?.url || !typeName) {
+        throw new moleculer.Errors.MoleculerClientError(
+          'Every document needs a document type',
+          422,
+          'DOCUMENT_TYPE_REQUIRED',
+        );
+      }
+
+      return { name: file.name, size: file.size, url: file.url, type, typeName };
+    });
+  }
+
+  // Gyvūną registruojantys servisai dokumentus patikrina prieš sukurdami gyvūną.
+  @Action({
+    visibility: 'public',
+    params: { files: { type: 'any', optional: true } },
+  })
+  async validateFiles(ctx: Context<{ files?: unknown }, UserAuthMeta>) {
+    return ctx.params.files === undefined ? undefined : this.applyFileTypes(ctx, ctx.params.files);
+  }
+
   // Žurnale įvedamo įrašo įvykio data privaloma (kaip išorinės sistemos formoje), kitaip
   // vėlavimo patikra būtų apeinama. Data neprivaloma tik įrašui „Kita“.
   @Method
@@ -727,6 +795,10 @@ export default class RecordsService extends moleculer.Service {
         ctx.params,
         resolveLateness(this.requireEventDate(ctx.params), ctx.params.lateReason),
       );
+    }
+
+    if (ctx.params.file !== undefined) {
+      ctx.params.file = await this.applyFileTypes(ctx, ctx.params.file);
     }
 
     ctx.params.tenant = ctx.meta.profile;

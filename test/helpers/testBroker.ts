@@ -16,6 +16,7 @@ const REAL_SERVICES = [
   'permits.histories',
   'speciesClassifiers',
   'markingTypeClassifiers',
+  'documentTypeClassifiers',
   'issuerClassifiers',
   'users',
   'tenants',
