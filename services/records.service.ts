@@ -27,6 +27,7 @@ import { AuthUserRole, UserAuthMeta } from './api.service';
 import { FosteredAnimal } from './fosteredAnimals.service';
 import { MarkingTypeClassifier } from './markingTypeClassifiers.service';
 import { Permit } from './permits.service';
+import { RecordHistoryTypes } from './records.histories.service';
 import { AccountingType, Species } from './species.service';
 import { SpeciesClassifier } from './speciesClassifiers.service';
 import { Tenant } from './tenants.service';
@@ -96,6 +97,9 @@ interface Fields extends CommonFields {
   };
   tenant: Tenant['id'];
   user: User['id'];
+  annulledAt: Date;
+  annulledBy: User['id'];
+  annulReason: string;
 }
 
 interface Populates extends CommonPopulates {
@@ -257,12 +261,38 @@ const throwInvalidNumberOfAnimals = () => {
           },
         },
       },
+      // AAD sprendimas (#85, 33 kl. a): įrašų niekas netrina — jie anuliuojami nurodžius
+      // priežastį. Laukus nustato tik veiksmas `annul`.
+      annulledAt: {
+        type: 'date',
+        columnType: 'datetime',
+        readonly: true,
+      },
+      annulledBy: {
+        type: 'number',
+        readonly: true,
+        populate: {
+          action: 'users.resolve',
+          params: {
+            scope: false,
+          },
+        },
+      },
+      annulReason: {
+        type: 'string',
+        readonly: true,
+      },
       ...COMMON_FIELDS,
     },
     scopes: {
       ...COMMON_SCOPES,
+      notAnnulled: {
+        annulledAt: { $exists: false },
+      },
     },
-    defaultScopes: [...COMMON_DEFAULT_SCOPES],
+    // Anuliuotas įrašas neskaičiuojamas niekur (kiekis, gyvūno būsena, sertifikatas,
+    // ženklinimas), nes visi skaičiavimai įrašus ima su numatytosiomis sritimis.
+    defaultScopes: [...COMMON_DEFAULT_SCOPES, 'notAnnulled'],
     // Laukai, kurių apribotas naudotojas keisti negali (žr. ProfileMixin.beforeMutate).
     userImmutableFields: [
       'species',
@@ -278,10 +308,10 @@ const throwInvalidNumberOfAnimals = () => {
   hooks: {
     before: {
       newRecord: ['beforeCreate'],
-      list: ['beforeSelect', 'handleFilters'],
+      list: ['beforeSelect', 'handleFilters', 'includeAnnulled'],
       find: ['beforeSelect', 'handleFilters'],
       count: ['beforeSelect', 'handleFilters'],
-      get: ['beforeSelect', 'handleFilters'],
+      get: ['beforeSelect', 'handleFilters', 'includeAnnulled'],
       all: ['beforeSelect', 'handleFilters'],
       update: ['beforeMutate', 'validateChangedNumberOfAnimals'],
       replace: ['beforeMutate', 'validateChangedNumberOfAnimals'],
@@ -296,6 +326,11 @@ const throwInvalidNumberOfAnimals = () => {
   },
   actions: {
     create: {
+      rest: null,
+      visibility: 'public',
+    },
+    // Įrašų niekas netrina (#85, 33 kl. a) — vietoj to `annul`.
+    remove: {
       rest: null,
       visibility: 'public',
     },
@@ -336,6 +371,130 @@ export default class RecordsService extends moleculer.Service {
     }
 
     return ctx.call('records.create', params);
+  }
+
+  // AAD sprendimas (#85, 33 kl. a): įrašų niekas netrina — laikytojas ir AAD įrašą anuliuoja
+  // nurodę priežastį. Anuliuotas įrašas lieka matomas, bet kiekis, gyvūno būsena ir kortelės
+  // numeriai perskaičiuojami be jo.
+  @Action({
+    rest: 'POST /:id/annul',
+    params: {
+      id: { type: 'number', convert: true },
+      reason: { type: 'string', trim: true, empty: false },
+    },
+  })
+  async annul(ctx: Context<{ id: number; reason: string }, UserAuthMeta>) {
+    const record = await this.findAccessibleRecord(ctx);
+    if (record.annulledAt) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Record is already annulled',
+        422,
+        'RECORD_ANNULLED',
+      );
+    }
+    // Anuliavimas skaičiuojamas kaip įrašo pašalinimas: įsigijimo neanuliuosi, jei dalis
+    // gyvūnų jau išėjo.
+    await this.assertStockAfterChange(ctx, record);
+
+    // Sąlyginis atnaujinimas: iš dviejų vienu metu siųstų anuliavimų įrašomas tik vienas.
+    const now = new Date();
+    const userId = ctx.meta.user?.id ?? null;
+    const adapter = await this.getAdapter(ctx);
+    const updated = await adapter
+      .client('records')
+      .where({ id: record.id })
+      .whereNull('annulledAt')
+      .whereNull('deletedAt')
+      .update({
+        annulledAt: now,
+        annulledBy: userId,
+        annulReason: ctx.params.reason,
+        updatedAt: now,
+        updatedBy: userId,
+      });
+    if (!updated) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Record is already annulled',
+        422,
+        'RECORD_ANNULLED',
+      );
+    }
+
+    // Istorija įrašoma pirma — perskaičiavimo klaida neturi palikti anuliavimo be priežasties.
+    await this.createRecordHistory(ctx, record.id, RecordHistoryTypes.ANNULLED, ctx.params.reason);
+
+    const annulled: Record = await this.resolveEntities(ctx, {
+      id: record.id,
+      scope: '-notAnnulled',
+    });
+    ctx.locals.entity = record;
+    await this.recalculateSpeciesAmount(ctx, annulled);
+    await this.syncCurrentCertificate(ctx, annulled);
+
+    return annulled;
+  }
+
+  @Action({
+    rest: 'GET /:id/history',
+    params: {
+      id: { type: 'number', convert: true },
+      page: { type: 'number', convert: true, integer: true, min: 1, optional: true },
+      pageSize: { type: 'number', convert: true, integer: true, min: 1, optional: true },
+    },
+  })
+  async getHistory(ctx: Context<{ id: number; page?: number; pageSize?: number }, UserAuthMeta>) {
+    await this.findAccessibleRecord(ctx);
+
+    return ctx.call('records.histories.list', {
+      sort: '-createdAt',
+      query: { record: ctx.params.id },
+      page: ctx.params.page,
+      pageSize: ctx.params.pageSize,
+      populate: 'createdBy',
+    });
+  }
+
+  // Laikytojui pasiekiami tik jo (ar jo įmonės) įrašai, kaip per `beforeMutate`; svetimas
+  // įrašas jam „neegzistuoja“ (404). Randamas ir anuliuotas įrašas.
+  @Method
+  async findAccessibleRecord(ctx: Context<{ id: number }, UserAuthMeta>): Promise<Record> {
+    const accessQuery = this.buildAccessQuery(ctx.meta);
+    return this.resolveEntities(
+      ctx,
+      { id: ctx.params.id, query: accessQuery || {}, scope: '-notAnnulled' },
+      { throwIfNotExist: true },
+    );
+  }
+
+  @Method
+  createRecordHistory(
+    ctx: Context<unknown, UserAuthMeta>,
+    record: Record['id'],
+    type: string,
+    reason: string,
+    changes?: object,
+  ) {
+    return ctx.call('records.histories.create', { record, type, reason, changes });
+  }
+
+  // Žurnale anuliuoti įrašai rodomi su žyma, todėl sąrašas ir peržiūra juos grąžina.
+  // Administratoriaus `scope: false` ir taip išjungia visas numatytąsias sritis.
+  @Method
+  includeAnnulled(ctx: Context<any>) {
+    const { scope } = ctx.params;
+    if (scope === false || scope === 'false') return ctx;
+
+    // Kaip `sanitizeParams`: eilutė gali turėti kelias sritis, atskirtas kableliais ar tarpais.
+    const scopes =
+      !scope || scope === true || scope === 'true'
+        ? []
+        : Array.isArray(scope)
+        ? scope
+        : String(scope)
+            .split(/[,\s]+/)
+            .filter(Boolean);
+    ctx.params.scope = [...scopes, '-notAnnulled'];
+    return ctx;
   }
 
   @Method
