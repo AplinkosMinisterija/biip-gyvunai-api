@@ -293,24 +293,27 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  // Leidimo istoriją (kas ir kada keitė) mato tik AAD; visada grąžinamas tik sąrašas.
   @Action({
     rest: 'GET /:id/history',
+    auth: RestrictionType.ADMIN,
     params: {
       id: {
         type: 'number',
         convert: true,
       },
+      page: { type: 'number', convert: true, integer: true, min: 1, optional: true },
+      pageSize: { type: 'number', convert: true, integer: true, min: 1, optional: true },
     },
   })
   async getHistory(
     ctx: Context<{
       id: number;
-      type?: string;
       page?: number;
       pageSize?: number;
     }>,
   ) {
-    return ctx.call(`permits.histories.${ctx.params.type || 'list'}`, {
+    return ctx.call('permits.histories.list', {
       sort: '-createdAt',
       query: {
         permit: ctx.params.id,
