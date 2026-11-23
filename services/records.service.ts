@@ -7,10 +7,11 @@ import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { latestRecordByDate } from '../modules/latestRecord';
+import { diffRecord, RECORD_DATE_FIELDS, RecordEditableField } from '../modules/recordChanges';
 import {
   AMOUNT_RECORD_TYPES,
-  OUTGOING_RECORD_TYPES,
   calculateGroupAmount,
+  OUTGOING_RECORD_TYPES,
 } from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
@@ -334,6 +335,11 @@ const throwInvalidNumberOfAnimals = () => {
       rest: null,
       visibility: 'public',
     },
+    // Taisoma tik nurodžius priežastį (#85, 27 kl. a) — per `edit` (PATCH /records/:id).
+    update: {
+      rest: null,
+      visibility: 'public',
+    },
   },
 })
 export default class RecordsService extends moleculer.Service {
@@ -432,6 +438,97 @@ export default class RecordsService extends moleculer.Service {
     await this.syncCurrentCertificate(ctx, annulled);
 
     return annulled;
+  }
+
+  // AAD sprendimas (#85, 27 kl. a): laikytojas ir AAD taiso įrašo duomenis nurodę priežastį,
+  // pakeisti laukai (buvusi ir nauja reikšmė) saugomi istorijoje. Tipas, gyvūnas, rūšis ir
+  // leidimas nekeičiami: klaidingą įrašą reikia anuliuoti ir įvesti naują.
+  @Action({
+    rest: 'PATCH /:id',
+    params: {
+      id: { type: 'number', convert: true },
+      reason: { type: 'string', trim: true, empty: false },
+      date: 'string|optional',
+      numberOfAnimals: 'number|convert|integer|min:0|optional',
+      note: 'string|optional',
+      certificateNo: 'string|optional',
+      markingNumber: 'string|optional',
+      markingCertificateNo: 'string|optional',
+      markingType: 'number|convert|optional',
+      markingDate: 'string|optional',
+      acquiredFrom: 'object|optional',
+      acquireDate: 'string|optional',
+      transferRecipient: 'object|optional',
+      municipality: 'object|optional',
+      vaccineName: 'string|optional',
+      deathReason: 'string|optional',
+      vetExaminationDate: 'string|optional',
+      file: 'array|optional',
+    },
+  })
+  async edit(ctx: Context<{ id: number; reason: string; [field: string]: unknown }, UserAuthMeta>) {
+    const record = await this.findAccessibleRecord(ctx);
+    if (record.annulledAt) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'An annulled record cannot be changed',
+        422,
+        'RECORD_ANNULLED',
+      );
+    }
+
+    const invalidDate = RECORD_DATE_FIELDS.find(
+      (field) => ctx.params[field] && Number.isNaN(new Date(ctx.params[field] as string).getTime()),
+    );
+    if (invalidDate) {
+      throw new moleculer.Errors.MoleculerClientError(
+        `Invalid ${invalidDate}`,
+        422,
+        'INVALID_DATE',
+      );
+    }
+
+    const changes = diffRecord(record, ctx.params);
+    // Kiekis taisomas tik grupinės apskaitos kiekį keičiančiame įraše — kitur jis nenaudojamas.
+    if (changes.numberOfAnimals && !(await this.usesGroupAmount(ctx, record))) {
+      delete changes.numberOfAnimals;
+    }
+    const changedFields = Object.keys(changes) as RecordEditableField[];
+    if (!changedFields.length) return record;
+
+    if (changes.numberOfAnimals) {
+      await this.assertStockAfterChange(ctx, record, {
+        species: record.species,
+        type: record.type,
+        numberOfAnimals: Number(changes.numberOfAnimals.new),
+      });
+    }
+
+    // Įrašoma ta pati (sutvarkyta) reikšmė, kuri saugoma istorijoje.
+    const updated: Record = await this.updateEntity(ctx, {
+      id: record.id,
+      ...Object.fromEntries(changedFields.map((field) => [field, changes[field].new])),
+    });
+
+    await this.createRecordHistory(
+      ctx,
+      record.id,
+      RecordHistoryTypes.UPDATED,
+      ctx.params.reason,
+      changes,
+    );
+
+    ctx.locals.entity = record;
+    await this.recalculateSpeciesAmount(ctx, updated);
+    await this.syncCurrentCertificate(ctx, updated);
+
+    return updated;
+  }
+
+  @Method
+  async usesGroupAmount(ctx: Context<unknown, UserAuthMeta>, record: Record): Promise<boolean> {
+    if (!record.species || !AMOUNT_RECORD_TYPES.includes(record.type)) return false;
+    const species: Species = await ctx.call('species.resolve', { id: record.species });
+    return !!species && species.type !== AccountingType.INDIVIDUAL;
   }
 
   @Action({
