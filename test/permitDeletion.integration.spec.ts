@@ -29,7 +29,7 @@ const insert = async (table: string, row: Record<string, unknown>): Promise<numb
 const deletedAtOf = async (table: string, id: number) =>
   (await knex(table).where({ id }).first('deletedAt')).deletedAt;
 
-describe('permit deletion cascade (integration)', () => {
+describe('permit deletion (integration)', () => {
   let broker: ServiceBroker;
   let permitId: number;
   let speciesId: number;
@@ -54,7 +54,7 @@ describe('permit deletion cascade (integration)', () => {
     });
     await broker.waitForServices(['removedEventSpy']);
 
-    permitId = await createPermitFixture({ permitNumber: 'DEL-CASCADE-1', users: [5] });
+    permitId = await createPermitFixture({ permitNumber: 'DEL-PERMIT-1', users: [5] });
     await knex('permits')
       .where({ id: permitId })
       .update({
@@ -99,10 +99,9 @@ describe('permit deletion cascade (integration)', () => {
     await knex.destroy();
   });
 
-  it('marks species, animals, records and permit species deleted with the permit date', async () => {
-    const permitDeletedAt = await deletedAtOf('permits', permitId);
-
-    expect(permitDeletedAt).not.toBeNull();
+  // AAD patikslinimas (#85, 5 kl., 2026-10-21): gyvūnai lieka, kol perduodami per žurnalo įrašus.
+  it('marks only the permit deleted and keeps its species, animals and records', async () => {
+    expect(await deletedAtOf('permits', permitId)).not.toBeNull();
     for (const [table, id] of [
       ['species', speciesId],
       ['animals', animalId],
@@ -110,7 +109,7 @@ describe('permit deletion cascade (integration)', () => {
       ['records', animalRecordId],
       ['permitSpecies', permitSpeciesId],
     ] as const) {
-      expect(await deletedAtOf(table, id)).toEqual(permitDeletedAt);
+      expect(await deletedAtOf(table, id)).toBeNull();
     }
   });
 
@@ -134,15 +133,17 @@ describe('permit deletion cascade (integration)', () => {
     expect(await deletedAtOf('records', earlierRemovedRecordId)).toEqual(earlierRemovedAt);
   });
 
-  it('removes the permit species from public statistics', async () => {
+  // Vieša statistika ir toliau skaičiuoja panaikinto leidimo gyvūnus (kaip iki šiol); kaip turi
+  // būti, laukiama AAD atsakymo (#85, 35 kl.).
+  it('keeps counting the animals of the deleted permit in public statistics', async () => {
     const general: { speciesCount: number } = await broker.call('permits.generalStatistic');
-    const publicSpecies: unknown[] = await broker.call(
+    const publicSpecies: { count: number }[] = await broker.call(
       'species.publicSpeciesByMunicipalityAll',
       {},
     );
 
-    expect(general.speciesCount).toBe(0);
-    expect(publicSpecies).toEqual([]);
+    expect(general.speciesCount).toBe(7);
+    expect(publicSpecies).toEqual([expect.objectContaining({ count: 7 })]);
   });
 
   it('removes the permit from the public cadastral search', async () => {
@@ -154,33 +155,23 @@ describe('permit deletion cascade (integration)', () => {
     expect(rows).toEqual([]);
   });
 
-  it('fills the deleted permit of a deleted species', async () => {
+  it('lets an admin read the data of a deleted permit with the permit filled', async () => {
     const species = (await broker.call(
       'species.list',
-      { query: { permit: permitId }, scope: 'deleted', populate: ['permit'] },
+      { query: { permit: permitId }, populate: ['permit'] },
       { meta: adminMeta() },
-    )) as { rows: { permit: { id: number; permitNumber: string } }[] };
-
-    expect(species.rows[0].permit).toMatchObject({ id: permitId, permitNumber: 'DEL-CASCADE-1' });
-  });
-
-  it('lets an admin read the deleted data with the deleted scope', async () => {
-    const species: { rows: { id: number }[] } = await broker.call(
-      'species.list',
-      { query: { permit: permitId }, scope: 'deleted' },
-      { meta: adminMeta() },
-    );
+    )) as { rows: { id: number; permit: { id: number; permitNumber: string } }[] };
     const records: { rows: { id: number }[] } = await broker.call(
       'records.list',
-      { query: { permit: permitId }, scope: 'deleted' },
+      { query: { permit: permitId } },
       { meta: adminMeta() },
     );
 
     expect(species.rows.map(({ id }) => id)).toEqual([speciesId]);
-    expect(records.rows.map(({ id }) => id).sort()).toEqual(
-      [recordId, earlierRemovedRecordId].sort(),
-    );
+    expect(species.rows[0].permit).toMatchObject({ id: permitId, permitNumber: 'DEL-PERMIT-1' });
+    expect(records.rows.map(({ id }) => id)).toEqual([recordId]);
   });
+
   describe('restore', () => {
     const restore = (id: number, reason: string, meta: object = deletingAdminMeta()) =>
       broker.call('permits.restorePermit', { id, reason }, { meta });
@@ -193,7 +184,7 @@ describe('permit deletion cascade (integration)', () => {
     });
 
     it('refuses to restore when an active permit with the same number exists', async () => {
-      const duplicate = await createPermitFixture({ permitNumber: 'DEL-CASCADE-1' });
+      const duplicate = await createPermitFixture({ permitNumber: 'DEL-PERMIT-1' });
 
       await expect(restore(permitId, 'Klaidingai panaikintas')).rejects.toMatchObject({
         code: 400,
@@ -201,9 +192,7 @@ describe('permit deletion cascade (integration)', () => {
       await knex('permits').where({ id: duplicate }).delete();
     });
 
-    it('restores the permit with the data deleted together with it', async () => {
-      await knex('species').where({ id: speciesId }).update({ amount: 999 });
-
+    it('restores the permit and leaves its data as it was', async () => {
       await restore(permitId, 'Klaidingai panaikintas');
 
       for (const [table, id] of [
@@ -217,7 +206,6 @@ describe('permit deletion cascade (integration)', () => {
         expect(await deletedAtOf(table, id)).toBeNull();
       }
       expect(await deletedAtOf('records', earlierRemovedRecordId)).toEqual(earlierRemovedAt);
-      expect((await knex('species').where({ id: speciesId }).first('amount')).amount).toBe(7);
     });
 
     it('records who restored the permit and why', async () => {

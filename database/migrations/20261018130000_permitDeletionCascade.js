@@ -1,24 +1,20 @@
 /**
- * AAD sprendimas (#85, 5 kl.): panaikinto leidimo duomenys nerodomi viešai.
+ * AAD sprendimas (#85, 5 kl.): panaikinti leidimai nerodomi viešoje paieškoje pagal kadastro
+ * numerį (iki šiol rodinys rodė ir juos, ir panaikintas leidimo rūšių eilutes).
  *
- * - Viešos paieškos pagal kadastro numerį rodinys perkuriamas be panaikintų leidimų ir
- *   panaikintų leidimo rūšių eilučių (iki šiol rodė ir juos).
- * - Jau panaikintų leidimų rūšys, gyvūnai, įrašai ir leidimo rūšių eilutės pažymimi
- *   panaikintais ta pačia data kaip ir leidimas — taip daro ir naikinimas nuo šiol, o
- *   atstatant leidimą atstatomi tik su juo kartu panaikinti duomenys.
+ * Iš pradžių ši migracija dar pažymėdavo panaikintais jau panaikintų leidimų duomenis. AAD tai
+ * atšaukė (2026-10-21: gyvūnai lieka, kol perduodami), todėl ta dalis pašalinta prieš diegiant į
+ * produkciją; dev ir staging aplinkose ją atšaukia migracija 20261022120000.
  *
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
  */
 exports.up = async function (knex) {
   await knex.raw(cadastralIdsView({ onlyActive: true }));
-  await knex.raw(CASCADE_EXISTING_DELETIONS);
-  await knex.raw('REFRESH MATERIALIZED VIEW public_permit_species');
 };
 
 /**
- * Grąžinamas ankstesnis rodinys. Pažymėti panaikintais vaikai paliekami — jie priklauso
- * panaikintiems leidimams.
+ * Grąžinamas ankstesnis rodinys.
  *
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
@@ -26,46 +22,6 @@ exports.up = async function (knex) {
 exports.down = async function (knex) {
   await knex.raw(cadastralIdsView({ onlyActive: false }));
 };
-
-const CASCADE_EXISTING_DELETIONS = `
-  WITH deleted_permits AS (
-    SELECT id, deleted_at, deleted_by FROM permits WHERE deleted_at IS NOT NULL
-  ),
-  deleted_species AS (
-    UPDATE species s
-    SET deleted_at = p.deleted_at, deleted_by = p.deleted_by
-    FROM deleted_permits p
-    WHERE s.permit_id = p.id AND s.deleted_at IS NULL
-    RETURNING s.id, s.deleted_at, s.deleted_by
-  ),
-  deleted_permit_species AS (
-    UPDATE permit_species ps
-    SET deleted_at = p.deleted_at, deleted_by = p.deleted_by
-    FROM deleted_permits p
-    WHERE ps.permit_id = p.id AND ps.deleted_at IS NULL
-    RETURNING ps.id
-  ),
-  deleted_animals AS (
-    UPDATE animals a
-    SET deleted_at = p.deleted_at, deleted_by = p.deleted_by
-    FROM deleted_permits p
-    WHERE a.deleted_at IS NULL
-      AND (a.permit_id = p.id
-           OR a.species_id IN (SELECT id FROM species WHERE permit_id = p.id))
-    RETURNING a.id
-  )
-  UPDATE records r
-  SET deleted_at = p.deleted_at, deleted_by = p.deleted_by
-  FROM deleted_permits p
-  WHERE r.deleted_at IS NULL
-    AND (r.permit_id = p.id
-         OR r.species_id IN (SELECT id FROM species WHERE permit_id = p.id)
-         OR r.animal_id IN (
-           SELECT a.id FROM animals a
-           JOIN species s ON s.id = a.species_id
-           WHERE s.permit_id = p.id
-         ))
-`;
 
 const cadastralIdsView = ({ onlyActive }) => `
   DROP MATERIALIZED VIEW IF EXISTS public_permits_by_cadastral_ids;
