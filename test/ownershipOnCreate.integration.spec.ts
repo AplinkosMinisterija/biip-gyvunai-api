@@ -83,7 +83,12 @@ describe('ownership on species/animal creation (integration)', () => {
 
     const animal: { tenant: number } = await broker.call(
       'animals.newAnimal',
-      { species: species.id, gender: 'MALE', birthDate: '2025-05-05' },
+      {
+        lateReason: 'Įvestas vėliau (testas)',
+        species: species.id,
+        gender: 'MALE',
+        birthDate: '2025-05-05',
+      },
       { meta },
     );
     expect(animal.tenant).toBe(TENANT);
@@ -95,7 +100,12 @@ describe('ownership on species/animal creation (integration)', () => {
     await expect(
       broker.call(
         'animals.newAnimal',
-        { species: Number(species.id), gender: 'MALE', birthDate: '2025-05-05' },
+        {
+          lateReason: 'Įvestas vėliau (testas)',
+          species: Number(species.id),
+          gender: 'MALE',
+          birthDate: '2025-05-05',
+        },
         { meta: userMeta({ userId: STRANGER }) },
       ),
     ).rejects.toMatchObject({ code: 422, type: 'INVALID_PERMIT' });

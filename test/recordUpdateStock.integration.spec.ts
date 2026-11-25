@@ -49,7 +49,7 @@ describe('editing a record cannot make the stock negative (integration)', () => 
   const newRecord = (species: number, type: string, numberOfAnimals: number) =>
     broker.call(
       'records.newRecord',
-      { species, type, numberOfAnimals, date: '2026-03-01' },
+      { lateReason: 'Įvestas vėliau (testas)', species, type, numberOfAnimals, date: '2026-03-01' },
       { meta },
     ) as Promise<{ id: number }>;
 

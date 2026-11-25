@@ -9,12 +9,14 @@ import { AuthUserRole, UserAuthMeta } from '../../services/api.service';
 const REAL_SERVICES = [
   'species',
   'records',
+  'records.histories',
   'animals',
   'permits',
   'permits.species',
   'permits.histories',
   'speciesClassifiers',
   'markingTypeClassifiers',
+  'documentTypeClassifiers',
   'issuerClassifiers',
   'users',
   'tenants',
@@ -27,6 +29,7 @@ const REAL_SERVICES = [
 ];
 
 const DOMAIN_TABLES = [
+  'record_histories',
   'records',
   'animals',
   'species',
