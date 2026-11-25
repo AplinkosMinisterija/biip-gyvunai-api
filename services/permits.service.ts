@@ -7,10 +7,6 @@ import PostgisMixin from 'moleculer-postgis';
 import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import {
-  REMOVE_PERMIT_WITH_DATA_SQL,
-  RESTORE_PERMIT_WITH_DATA_SQL,
-} from '../modules/permitDeletion';
-import {
   PermitIdentity,
   isMunicipalityAccepted,
   isPermitIdentityChanged,
@@ -295,24 +291,27 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
 })
 export default class PermitsService extends moleculer.Service {
+  // Leidimo istoriją (kas ir kada keitė) mato tik AAD; visada grąžinamas tik sąrašas.
   @Action({
     rest: 'GET /:id/history',
+    auth: RestrictionType.ADMIN,
     params: {
       id: {
         type: 'number',
         convert: true,
       },
+      page: { type: 'number', convert: true, integer: true, min: 1, optional: true },
+      pageSize: { type: 'number', convert: true, integer: true, min: 1, optional: true },
     },
   })
   async getHistory(
     ctx: Context<{
       id: number;
-      type?: string;
       page?: number;
       pageSize?: number;
     }>,
   ) {
-    return ctx.call(`permits.histories.${ctx.params.type || 'list'}`, {
+    return ctx.call('permits.histories.list', {
       sort: '-createdAt',
       query: {
         permit: ctx.params.id,
@@ -350,7 +349,7 @@ export default class PermitsService extends moleculer.Service {
     const { id, deleteReason, deleteOtherReason } = ctx.params;
     this.assertCanDeletePermits(ctx);
 
-    await this.removePermitWithData(ctx, id);
+    await this.markPermitDeleted(ctx, id);
 
     await this.createPermitHistory(id, ctx.meta, PermitHistoryTypes.DELETED, {
       deleteReason,
@@ -393,7 +392,7 @@ export default class PermitsService extends moleculer.Service {
       permitNumber: permit.permitNumber,
     });
 
-    await this.restorePermitWithData(ctx, id);
+    await this.unmarkPermitDeleted(ctx, id);
 
     await this.createPermitHistory(id, ctx.meta, PermitHistoryTypes.RESTORED, {
       restoreReason: reason,
@@ -640,15 +639,18 @@ export default class PermitsService extends moleculer.Service {
     }
   }
 
-  // Leidimas naikinamas kartu su jo duomenimis vienu SQL sakiniu, todėl `permits.remove`
-  // nenaudojamas; įvykis „permits.removed“ (viešų rodinių atnaujinimui) siunčiamas atskirai.
+  // AAD patikslinimas (#85, 5 kl., 2026-10-21): panaikinus leidimą jo gyvūnai lieka, kol perduodami
+  // per žurnalo įrašus, todėl pažymimas tik leidimas. `permits.remove` nenaudojamas, nes jis
+  // eina per `beforeMutate`; įvykis „permits.removed“ (viešų rodinių atnaujinimui) siunčiamas atskirai.
   @Method
-  async removePermitWithData(ctx: Context<unknown, UserAuthMeta>, permitId: number) {
+  async markPermitDeleted(ctx: Context<unknown, UserAuthMeta>, permitId: number) {
     const adapter = await this.getAdapter(ctx);
-    const { rows } = await adapter.client.raw(REMOVE_PERMIT_WITH_DATA_SQL, {
-      permitId,
-      userId: ctx.meta.user?.id ?? null,
-    });
+    const rows = await adapter
+      .client('permits')
+      .where({ id: permitId })
+      .whereNull('deletedAt')
+      .update({ deletedAt: new Date(), deletedBy: ctx.meta.user?.id ?? null })
+      .returning('id');
 
     if (!rows.length) {
       throwNotFoundError('Permit not found');
@@ -660,19 +662,17 @@ export default class PermitsService extends moleculer.Service {
   // Įvykis „permits.updated“ čia nesiunčiamas, nes jis istorijoje sukurtų dar ir UPDATED įrašą;
   // vieši rodiniai atnaujinami tiesiogiai.
   @Method
-  async restorePermitWithData(ctx: Context, permitId: number) {
+  async unmarkPermitDeleted(ctx: Context, permitId: number) {
     const adapter = await this.getAdapter(ctx);
-    const { rows } = await adapter.client.raw(RESTORE_PERMIT_WITH_DATA_SQL, { permitId });
+    const rows = await adapter
+      .client('permits')
+      .where({ id: permitId })
+      .whereNotNull('deletedAt')
+      .update({ deletedAt: null, deletedBy: null })
+      .returning('id');
 
     if (!rows.length) {
       throwNotFoundError('Permit not found');
-    }
-
-    const speciesIds = rows
-      .map(({ speciesId }: { speciesId: number | null }) => speciesId)
-      .filter((speciesId: number | null) => speciesId !== null);
-    for (const speciesId of speciesIds) {
-      await ctx.call('species.recalculateAmount', { id: speciesId });
     }
 
     await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
