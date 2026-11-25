@@ -242,6 +242,8 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       aviarySizeOutdoor: 'string',
       aviaryHeight: 'string',
       ...COMMON_FIELDS,
+      // AAD sprendimas (#85, 15 ir 30 kl.): sąrašuose rodoma atnaujinimo data (tik žmogaus pakeitimai).
+      updatedAt: { ...COMMON_FIELDS.updatedAt, hidden: false },
     },
     scopes: {
       ...COMMON_SCOPES,

@@ -42,6 +42,9 @@ describe('migration: merge Danielius and fix species saved with a permit row id'
   beforeAll(async () => {
     trx = await knex.transaction();
     await trx.raw('TRUNCATE records, animals, species, permit_species, permit_histories, permits');
+    // Ši migracija vykdoma prieš lotyniško pavadinimo indeksą (20261026120100), todėl jo dar
+    // nėra — kitaip nebūtų galima sukurti dublikatų, kuriuos migracija sujungia.
+    await trx.raw('DROP INDEX IF EXISTS species_classifiers_name_latin_unique');
     // Testinės DB pradiniai danieliai šiame teste nedalyvauja.
     await trx('speciesClassifiers')
       .whereRaw("lower(btrim(name)) = 'danielius'")

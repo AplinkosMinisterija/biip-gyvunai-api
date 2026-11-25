@@ -498,7 +498,12 @@ export default class SpeciesService extends moleculer.Service {
         ? await this.countIndividualAnimals(species.id)
         : await this.sumGroupRecords(species.id);
 
-    return this.updateEntity(ctx, { id: species.id, amount });
+    // AAD sprendimas (#85, 30 kl.): atnaujinimo data rodo tik žmogaus pakeitimus, todėl
+    // perskaičiuotas kiekis įrašomas tiesiogiai, nekeičiant `updatedAt`/`updatedBy`.
+    const adapter = await this.getAdapter(ctx);
+    await adapter.client('species').where({ id: species.id }).update({ amount });
+
+    return { ...species, amount };
   }
 
   // Skaičiuojama be naudotojo konteksto (`this.broker.call`), kad ProfileMixin

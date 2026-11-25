@@ -332,6 +332,10 @@ describe('permit, species and classifier validation (integration)', () => {
       await expect(create('Kitaip vadinamas vilkas', 'canis  Latinus')).rejects.toMatchObject({
         code: 422,
       });
+      // Neskaidomasis tarpas — tas pats pavadinimas; klaida aiški, ne DB indekso 500.
+      await expect(create('Trečiaip vadinamas vilkas', 'Canis latinus')).rejects.toMatchObject({
+        code: 422,
+      });
     });
 
     it('allows the same name with a different Latin name', async () => {
@@ -342,20 +346,23 @@ describe('permit, species and classifier validation (integration)', () => {
       expect(second.id).not.toEqual(first.id);
     });
 
-    it('keeps an existing Latin duplicate editable by its other fields', async () => {
-      const rows = await knex('speciesClassifiers')
-        .insert([
-          { name: 'Sena rozela', nameLatin: 'Platycercus testus', familyClassifierId: familyId },
-          { name: 'Kita rozela', nameLatin: 'Platycercus testus', familyClassifierId: familyId },
-        ])
+    // Dublikatų DB nebeleidžia (indeksas 20261026120100), todėl tikrinama, kad įrašas
+    // nelaikomas savo paties dublikatu.
+    it('keeps a classifier editable by its other fields', async () => {
+      const [row] = await knex('speciesClassifiers')
+        .insert({
+          name: 'Sena rozela',
+          nameLatin: 'Platycercus testus',
+          familyClassifierId: familyId,
+        })
         .returning('id');
-      const [, duplicateId] = rows.map(insertId);
-      classifierIds.push(...rows.map(insertId));
+      const id = insertId(row);
+      classifierIds.push(id);
 
       await expect(
         broker.call(
           'speciesClassifiers.update',
-          { id: duplicateId, name: 'Pataisyta rozela', nameLatin: 'Platycercus testus' },
+          { id, name: 'Pataisyta rozela', nameLatin: ' platycercus  testus' },
           { meta: adminMeta() },
         ),
       ).resolves.toMatchObject({ name: 'Pataisyta rozela' });

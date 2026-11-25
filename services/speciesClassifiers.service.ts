@@ -4,7 +4,7 @@ import moleculer from 'moleculer';
 import { Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
-import { normalizeClassifierName, normalizedColumnSql } from '../modules/permitValidation';
+import { normalizeClassifierName, normalizedSql } from '../modules/permitValidation';
 import {
   COMMON_DEFAULT_SCOPES,
   COMMON_FIELDS,
@@ -113,7 +113,7 @@ export default class SpeciesClassifiersService extends moleculer.Service {
     const duplicate = await adapter
       .client('speciesClassifiers')
       .whereNull('deletedAt')
-      .whereRaw(`${normalizedColumnSql('name_latin')} = ?`, [normalizeClassifierName(value)])
+      .whereRaw(`${normalizedSql('name_latin')} = ${normalizedSql('?')}`, [value])
       .modify((query: any) => entity?.id && query.whereNot('id', entity.id))
       .first('id');
 
