@@ -1,5 +1,6 @@
 'use strict';
 
+import { pick } from 'lodash';
 import moleculer, { Context } from 'moleculer';
 import { Action, Event, Method, Service } from 'moleculer-decorators';
 import {
@@ -9,11 +10,13 @@ import {
   EntityChangedParams,
   FieldHookCallback,
   RestrictionType,
+  isAdmin,
 } from '../types';
 import { TenantUser, TenantUserRole } from './tenantUsers.service';
 
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
+import { andCondition, searchCondition } from '../modules/clientQuery';
 import { UserAuthMeta } from './api.service';
 
 export enum UserRole {
@@ -170,13 +173,12 @@ export default class UsersService extends moleculer.Service {
       });
     }
     if (ctx.meta.user && ctx.meta.profile) {
-      ctx.params.query = {
+      ctx.params.query = andCondition(ctx.params.query, {
         $raw: {
           condition: `?? \\? ?`,
           bindings: ['tenants', Number(ctx.meta.profile)],
         },
-        ...ctx.params.query,
-      };
+      });
     } else if (ctx.meta.user && ctx.meta.user.type === UserType.ADMIN) {
       if (ctx.params.filter) {
         if (typeof ctx.params.filter === 'string') {
@@ -196,10 +198,7 @@ export default class UsersService extends moleculer.Service {
               bindings: ['tenants', ctx.params.filter.tenantId],
             };
           }
-          ctx.params.query = {
-            $raw,
-            ...ctx.params.query,
-          };
+          ctx.params.query = andCondition(ctx.params.query, { $raw });
           delete ctx.params.filter.tenantId;
           delete ctx.params.filter.role;
         }
@@ -224,7 +223,11 @@ export default class UsersService extends moleculer.Service {
         error: 'Not logged in',
       });
     }
-    const me = await this.updateEntity(ctx, { id: ctx.meta.user.id, ...ctx.params });
+    // Naudotojas keičia tik savo kontaktus: kiti užklausos laukai (ir `id`) neimami.
+    const me = await this.updateEntity(ctx, {
+      ...pick(ctx.params, ['email', 'phone', 'address']),
+      id: ctx.meta.user.id,
+    });
     const tenantUsers: TenantUser[] = await ctx.call('tenantUsers.find', {
       query: {
         userId: me?.id,
@@ -269,13 +272,22 @@ export default class UsersService extends moleculer.Service {
   })
   async byTenant(
     ctx: Context<
-      { query?: object } & {
+      { query?: object; search?: unknown; searchFields?: unknown } & {
         tenant: number;
         role?: TenantUserRole;
-      }
+      },
+      UserAuthMeta
     >,
   ) {
-    const { tenant, role, ...listParams } = ctx.params;
+    // Įmonės narius mato administratorius arba tos įmonės narys, pasirinkęs jos profilį.
+    if (!isAdmin(ctx) && Number(ctx.meta?.profile) !== Number(ctx.params.tenant)) {
+      throw new ApiGateway.Errors.UnAuthorizedError('NO_RIGHTS', {
+        error: 'Unauthorized',
+      });
+    }
+
+    // Šis veiksmas sąrašo hook'ų neturi, todėl paieška sugrupuojama čia (žr. `groupSearch`).
+    const { tenant, role, search, searchFields, ...listParams } = ctx.params;
     const params = this.sanitizeParams(listParams, {
       list: true,
     });
@@ -293,10 +305,11 @@ export default class UsersService extends moleculer.Service {
       };
     }
 
-    params.query = {
-      $raw,
-      ...params.query,
-    };
+    params.query = andCondition(params.query, { $raw });
+    const searchQuery = searchCondition(this.$fields, search, searchFields);
+    if (searchQuery) {
+      params.query = andCondition(params.query, searchQuery);
+    }
 
     const rows = await this.findEntities(ctx, params);
     const total = await this.countEntities(ctx, params);
@@ -331,10 +344,7 @@ export default class UsersService extends moleculer.Service {
         bindings: ['tenants', ...ids],
       };
 
-      params.query = {
-        $raw,
-        ...params.query,
-      };
+      params.query = andCondition(params.query, { $raw });
     }
 
     const rows = await this.findEntities(ctx, params);

@@ -59,7 +59,7 @@ describe('profile.mixin beforeSelect sort handling', () => {
     );
 
     expect(ctx.params.sort).toEqual(['permitNumber']);
-    expect(ctx.params.query).toEqual({ user: 5 });
+    expect(ctx.params.query).toEqual({ $and: [{ user: 5 }] });
   });
 
   it('drops sort keys that are not real table columns', () => {

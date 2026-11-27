@@ -6,6 +6,7 @@ import { Action, Event, Method, Service } from 'moleculer-decorators';
 import PostgisMixin from 'moleculer-postgis';
 import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { isSqlSafeJson, parseQuery } from '../modules/clientQuery';
 import {
   PermitIdentity,
   isMunicipalityAccepted,
@@ -278,14 +279,16 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
   },
   hooks: {
     before: {
-      create: 'beforeCreate',
+      create: ['assertSafeGeom', 'beforeCreate'],
+      // `list` ir `find` geometrijos filtrą pašalina `moleculer-postgis` hook'as (žr.
+      // `_applyGeomFilterFunction`), kitiems veiksmams jis nurodomas čia.
       list: 'beforeSelectPermit',
       find: 'beforeSelectPermit',
-      count: 'beforeSelectPermit',
-      get: 'beforeSelectPermit',
-      all: 'beforeSelectPermit',
-      update: ['beforeMutate', 'beforeUpdate'],
-      replace: 'beforeMutate',
+      count: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
+      get: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
+      all: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
+      update: ['assertSafeGeom', 'beforeMutate', 'beforeUpdate'],
+      replace: ['assertSafeGeom', 'beforeMutate'],
       remove: 'beforeMutate',
     },
   },
@@ -677,6 +680,39 @@ export default class PermitsService extends moleculer.Service {
 
     await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMIT_SPECIES);
     await this.refreshMaterializedView(ctx, MaterializedView.PUBLIC_PERMITS_BY_CADASTRAL_IDS);
+  }
+
+  // `moleculer-postgis` geometrijos filtro (`query.geom`) reikšmę į SQL įterpia kaip tekstą.
+  // Filtro niekas nenaudoja, todėl jis išjungtas: sąlyga iš užklausos pašalinama. Metodo
+  // pavadinimas — bibliotekos: taip pakeičiamas jos `list` ir `find` hook'as.
+  @Method
+  _applyGeomFilterFunction(ctx: Context<{ query?: unknown }>) {
+    const query = parseQuery(ctx.params.query);
+    delete query.geom;
+    ctx.params.query = query;
+
+    return ctx;
+  }
+
+  // Išsaugomą geometriją `moleculer-postgis` į SQL taip pat įterpia kaip JSON tekstą, todėl
+  // geometrija, kurios tekste yra SQL eilutę nutraukiančių simbolių, atmetama. Eilute atsiųsta
+  // geometrija čia išskaidoma: neišskaidomą biblioteka įterptų tokią, kokia yra.
+  @Method
+  assertSafeGeom(ctx: Context<{ geom?: unknown }>) {
+    let { geom } = ctx.params;
+    if (geom === undefined || geom === null) return ctx;
+
+    if (typeof geom === 'string') {
+      try {
+        geom = JSON.parse(geom);
+      } catch (err) {
+        throwValidationError('Invalid geometry');
+      }
+    }
+    if (!isSqlSafeJson(geom)) throwValidationError('Invalid geometry');
+
+    ctx.params.geom = geom;
+    return ctx;
   }
 
   @Method

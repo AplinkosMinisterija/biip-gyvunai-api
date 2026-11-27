@@ -7,6 +7,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import ApiGateway from 'moleculer-web';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { scopeCondition } from '../modules/clientQuery';
 import { latestRecordByDate } from '../modules/latestRecord';
 import { diffRecord, RECORD_DATE_FIELDS, RecordEditableField } from '../modules/recordChanges';
 import { isLateEventDate, recordEventDate, resolveLateness } from '../modules/recordLateness';
@@ -314,9 +315,7 @@ const throwInvalidNumberOfAnimals = () => {
     },
     scopes: {
       ...COMMON_SCOPES,
-      notAnnulled: {
-        annulledAt: { $exists: false },
-      },
+      notAnnulled: scopeCondition({ annulledAt: { $exists: false } }),
     },
     // Anuliuotas įrašas neskaičiuojamas niekur (kiekis, gyvūno būsena, sertifikatas,
     // ženklinimas), nes visi skaičiavimai įrašus ima su numatytosiomis sritimis.
