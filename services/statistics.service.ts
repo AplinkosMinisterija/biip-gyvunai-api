@@ -2,6 +2,7 @@
 
 import Moleculer, { Context } from 'moleculer';
 import { Action, Service } from 'moleculer-decorators';
+import { parseQuery } from '../modules/clientQuery';
 import { AuthUserRole, UserAuthMeta } from './api.service';
 
 @Service({
@@ -25,24 +26,20 @@ export default class StatisticsService extends Moleculer.Service {
       }
     }
     const data: any = {};
+    // `query` gali ateiti ir kaip JSON eilutė; lytį nustato pats veiksmas.
+    const query = parseQuery(ctx.params?.query);
 
     data.male = await ctx.call('animals.count', {
       filter: {
         ...filters,
       },
-      query: {
-        gender: 'MALE',
-        ...ctx.params?.query,
-      },
+      query: { ...query, gender: 'MALE' },
     });
     data.female = await ctx.call('animals.count', {
       filter: {
         ...filters,
       },
-      query: {
-        gender: 'FEMALE',
-        ...ctx.params?.query,
-      },
+      query: { ...query, gender: 'FEMALE' },
     });
     if (!params.speciesClassifier && !params.species) {
       data.species = await ctx.call('species.count', {

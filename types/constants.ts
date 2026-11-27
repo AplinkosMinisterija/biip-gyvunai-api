@@ -1,4 +1,5 @@
 import Moleculer, { Errors } from 'moleculer';
+import { andCondition, parseQuery, scopeCondition } from '../modules/clientQuery';
 import { User } from '../services/users.service';
 import { FieldHookCallback } from './';
 
@@ -104,13 +105,19 @@ export const COMMON_FIELDS = {
   },
 };
 
+// Sritis užklausoje nurodoma masyvu arba eilute, atskirta kableliais ar tarpais.
+const isScopeRequested = (scope: unknown, name: string): boolean =>
+  (Array.isArray(scope) ? scope : String(scope ?? '').split(/[,\s]+/)).includes(name);
+
+// Sritys rašomos funkcijomis, kad kliento užklausa jų neišjungtų (žr. modules/clientQuery.ts).
+// Paprašius srities `deleted` (ją per API gali nurodyti tik administratorius), numatytoji
+// `notDeleted` netaikoma — kitaip abi sąlygos kartu nieko negrąžintų.
 export const COMMON_SCOPES = {
-  notDeleted: {
-    deletedAt: { $exists: false },
-  },
-  deleted: {
-    deletedAt: { $exists: true },
-  },
+  notDeleted: (query: unknown, _ctx?: unknown, params?: { scope?: unknown }) =>
+    isScopeRequested(params?.scope, 'deleted')
+      ? parseQuery(query)
+      : andCondition(query, { deletedAt: { $exists: false } }),
+  deleted: scopeCondition({ deletedAt: { $exists: true } }),
 };
 
 export const COMMON_PAGINATION_PARAMS = {
@@ -201,13 +208,7 @@ export type DeepQuery = {
 };
 
 export function fieldValueForDeletedScope({ ctx, value }: any) {
-  if (!ctx?.params?.scope) return;
-  let scope = ctx.params.scope;
-  if (!Array.isArray(scope)) {
-    scope = scope.split(',');
-  }
-
-  if (!scope.includes('deleted')) return;
+  if (!isScopeRequested(ctx?.params?.scope, 'deleted')) return;
   return value;
 }
 

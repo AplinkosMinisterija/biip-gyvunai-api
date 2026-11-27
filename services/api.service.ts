@@ -112,6 +112,29 @@ export enum AuthUserRole {
   },
 })
 export default class ApiService extends moleculer.Service {
+  // `moleculer-web` klaidos kūnas. Kliento klaidos (4xx) grąžinamos kaip yra, o vidinių klaidų
+  // tekstas — ne: duomenų bazės klaidoje būna visas SQL sakinys. Pati klaida lieka žurnale.
+  @Method
+  reformatError(err: {
+    name?: string;
+    message?: string;
+    code?: unknown;
+    type?: string;
+    data?: unknown;
+  }) {
+    const { name, message, code, type, data } = err;
+    if (typeof code === 'number' && code >= 400 && code < 500) {
+      return { name, message, code, type, data };
+    }
+
+    return {
+      name: 'InternalServerError',
+      message: 'Internal server error',
+      code: typeof code === 'number' && code >= 500 && code < 600 ? code : 500,
+      type: 'INTERNAL_SERVER_ERROR',
+    };
+  }
+
   @Method
   getRestrictionType(req: RequestMessage) {
     return req.$action.auth || req.$action.service?.settings?.auth || RestrictionType.DEFAULT;

@@ -10,6 +10,9 @@ import {
   CommonPopulates,
   RestrictionType,
   Table,
+  isAdmin,
+  throwNoRightsError,
+  throwNotFoundError,
 } from '../types';
 import { AuthUserRole, UserAuthMeta } from './api.service';
 import { User } from './users.service';
@@ -40,6 +43,15 @@ interface Populates extends CommonPopulates {
   user: User;
   tenant: Tenant;
 }
+
+// Įmonės narius tvarkyti gali jos savininkas ir naudotojų administratorius.
+const MANAGER_ROLES: (TenantUserRole | undefined)[] = [
+  TenantUserRole.OWNER,
+  TenantUserRole.USER_ADMIN,
+];
+
+// Užklausos iš API vartų (`services/api.service.ts`) ateina su šiuo `ctx.caller`.
+const API_SERVICE = 'api';
 
 export type TenantUser<
   P extends keyof Populates = never,
@@ -127,6 +139,8 @@ export type TenantUser<
   hooks: {
     before: {
       create: ['beforeCreate'],
+      update: 'assertCanManageMember',
+      remove: 'assertCanManageMember',
       list: 'beforeSelect',
       find: 'beforeSelect',
       count: 'beforeSelect',
@@ -154,6 +168,35 @@ export type TenantUser<
   },
 })
 export default class TenantUsersService extends moleculer.Service {
+  // Per API narystę keisti ar šalinti gali administratorius arba tos pačios įmonės savininkas
+  // ar jos naudotojų administratorius, pasirinkęs įmonės profilį; svetima narystė „neegzistuoja“
+  // (404). Vidiniai kvietimai (prisijungimo sinchronizavimas, profilio atnaujinimas) neribojami:
+  // `ctx.caller` klientas per API nustatyti negali.
+  @Method
+  async assertCanManageMember(
+    ctx: Context<{ id: number | string; role?: TenantUserRole }, UserAuthMeta>,
+  ) {
+    if (ctx.caller !== API_SERVICE || isAdmin(ctx)) return ctx;
+
+    const { profile, user } = ctx.meta;
+    const manager: TenantUser | undefined =
+      profile && user
+        ? await this.findEntity(ctx, { query: { tenant: profile, user: user.id } })
+        : undefined;
+    const member: TenantUser | undefined = MANAGER_ROLES.includes(manager?.role)
+      ? await this.findEntity(ctx, { query: { id: ctx.params.id, tenant: profile } })
+      : undefined;
+    if (!member) throwNotFoundError('Tenant user not found');
+
+    // Savininko narystę keisti ir savininko rolę suteikti gali tik savininkas — kitaip naudotojų
+    // administratorius galėtų pats tapti savininku arba jį pašalinti.
+    const concernsOwner =
+      member.role === TenantUserRole.OWNER || ctx.params.role === TenantUserRole.OWNER;
+    if (concernsOwner && manager.role !== TenantUserRole.OWNER) throwNoRightsError();
+
+    return ctx;
+  }
+
   @Action({
     rest: 'GET /my',
     auth: RestrictionType.USER,
@@ -215,12 +258,24 @@ export default class TenantUsersService extends moleculer.Service {
       const profileData = await this.findEntity(ctx, {
         query: { tenantId: ctx.meta.profile, userId: ctx.meta.user.id },
       });
-      if (![TenantUserRole.OWNER, TenantUserRole.USER_ADMIN].some((r) => r === profileData?.role)) {
+      // Kviesti galima tik į įmonę, kurios profilis pasirinktas.
+      if (Number(tenantId) !== Number(ctx.meta.profile)) {
+        throw new moleculer.Errors.MoleculerClientError(
+          'Users can be added only to the selected tenant.',
+          401,
+          'NO_RIGHTS',
+        );
+      }
+      if (!MANAGER_ROLES.includes(profileData?.role)) {
         throw new moleculer.Errors.MoleculerClientError(
           'Only OWNER and USER_ADMIN can add users to tenant.',
           401,
           'NO_RIGHTS',
         );
+      }
+      // Savininko rolę suteikia tik savininkas (žr. `assertCanManageMember`).
+      if (role === TenantUserRole.OWNER && profileData.role !== TenantUserRole.OWNER) {
+        throwNoRightsError();
       }
     }
 

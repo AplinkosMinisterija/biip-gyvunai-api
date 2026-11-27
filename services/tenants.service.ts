@@ -2,10 +2,17 @@
 
 import moleculer, { Context } from 'moleculer';
 import { Action, Method, Service } from 'moleculer-decorators';
-import { COMMON_DEFAULT_SCOPES, COMMON_FIELDS, COMMON_SCOPES, RestrictionType } from '../types';
+import {
+  COMMON_DEFAULT_SCOPES,
+  COMMON_FIELDS,
+  COMMON_SCOPES,
+  RestrictionType,
+  isAdmin,
+} from '../types';
 import { TenantUser, TenantUserRole } from './tenantUsers.service';
 
 import DbConnection from '../mixins/database.mixin';
+import { andCondition } from '../modules/clientQuery';
 import { UserAuthMeta } from './api.service';
 import { UserType } from './users.service';
 
@@ -83,6 +90,13 @@ export interface Tenant {
     defaultPopulates: ['owner'],
   },
 
+  hooks: {
+    before: {
+      // Sąrašą gali kviesti ir naudotojas (`RestrictionType.DEFAULT`), bet jis mato tik savo įmones.
+      list: 'restrictToOwnTenants',
+    },
+  },
+
   actions: {
     find: {},
     list: {
@@ -99,6 +113,23 @@ export interface Tenant {
   },
 })
 export default class TenantsService extends moleculer.Service {
+  // Administratoriai ir vidiniai kvietimai (be naudotojo) neribojami. Narystės ieškomos be
+  // naudotojo konteksto, kad jų neapribotų pasirinktas profilis.
+  @Method
+  async restrictToOwnTenants(ctx: Context<{ query?: unknown }, UserAuthMeta>) {
+    if (!ctx.meta?.user || isAdmin(ctx)) return ctx;
+
+    const memberships: Pick<TenantUser, 'tenant'>[] = await this.broker.call('tenantUsers.find', {
+      query: { user: ctx.meta.user.id },
+      fields: ['tenant'],
+    });
+    ctx.params.query = andCondition(ctx.params.query, {
+      id: { $in: memberships.map(({ tenant }) => tenant) },
+    });
+
+    return ctx;
+  }
+
   @Action({
     rest: 'POST /invite',
     params: {

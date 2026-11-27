@@ -1,5 +1,6 @@
 import { pick } from 'lodash';
 import { Context } from 'moleculer';
+import { andCondition } from '../modules/clientQuery';
 import { AuthUserRole, UserAuthMeta } from '../services/api.service';
 
 type ProcessedField = { name: string; virtual?: boolean };
@@ -91,12 +92,11 @@ export default {
 
       ctx.params.sort = this.sanitizeSort(ctx.params.sort) || '-createdAt';
 
+      // Kliento `query` gali tik siaurinti: nuosavybės sąlyga pridedama taip, kad jos nei
+      // perrašyti, nei išjungti nebūtų galima (žr. modules/clientQuery.ts).
       const accessQuery = this.buildAccessQuery(meta, useRawUsers);
       if (accessQuery) {
-        ctx.params.query = {
-          ...accessQuery,
-          ...(ctx.params.query || {}),
-        };
+        ctx.params.query = andCondition(ctx.params.query, accessQuery);
       }
 
       return ctx;
