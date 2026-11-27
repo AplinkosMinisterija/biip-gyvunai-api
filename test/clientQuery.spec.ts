@@ -4,6 +4,7 @@ import {
   andCondition,
   isSafeSortField,
   isSqlSafeJson,
+  omitQueryFields,
   parseQuery,
   scopeCondition,
   searchCondition,
@@ -207,5 +208,43 @@ describe('isSafeSortField', () => {
     ['name'],
   ])('refuses %j', (field) => {
     expect(isSafeSortField(field)).toBe(false);
+  });
+});
+
+describe('omitQueryFields', () => {
+  const hidden = ['deletedAt', 'deletedBy'];
+
+  it('removes the fields at any depth and keeps the rest', () => {
+    const query = {
+      permitNumber: 'A-1',
+      deletedBy: 5,
+      $and: [{ users: [1] }, { deletedAt: { $exists: true }, type: 'ZOO' }],
+      $or: [{ deletedBy: 7 }, { municipality: { id: 13, deletedAt: '2026-01-01' } }],
+    };
+
+    expect(omitQueryFields(query, hidden)).toEqual({
+      permitNumber: 'A-1',
+      $and: [{ users: [1] }, { type: 'ZOO' }],
+      $or: [{}, { municipality: { id: 13 } }],
+    });
+  });
+
+  it('does not change the query it was given', () => {
+    const query = { deletedBy: 5, $and: [{ deletedAt: 1 }] };
+    omitQueryFields(query, hidden);
+
+    expect(query).toEqual({ deletedBy: 5, $and: [{ deletedAt: 1 }] });
+  });
+
+  it.each([undefined, null, 5, 'text', true])('returns %j as it is', (value) => {
+    expect(omitQueryFields(value, hidden)).toBe(value);
+  });
+
+  it('leaves values that are not plain objects alone', () => {
+    const date = new Date('2026-01-01');
+
+    expect(omitQueryFields({ issueDate: { $gte: date } }, hidden)).toEqual({
+      issueDate: { $gte: date },
+    });
   });
 });

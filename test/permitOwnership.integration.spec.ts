@@ -261,6 +261,140 @@ describe('permit ownership over HTTP (integration)', () => {
       },
     );
 
+    // AAD sprendimas (#85, 35 kl.): pagal naują tvarką panaikintą leidimą turėtojas mato su
+    // statusu, bet keisti jo negali; anksčiau panaikintas leidimas jam ir toliau nerodomas.
+    describe('revoked under the new rules', () => {
+      let revokedPermitId: number;
+
+      beforeAll(async () => {
+        revokedPermitId = await createPermitFixture({
+          permitNumber: `OWN-REV-${Math.random().toString(36).slice(2, 8)}`,
+          users: [localUserId.holder],
+        });
+        await knex('permits')
+          .where({ id: revokedPermitId })
+          .update({ deletedAt: new Date(), relocationRequired: true });
+      });
+
+      it.each(['/permits?pageSize=100', '/permits/all'])(
+        'the holder gets the permit with its status from GET %s',
+        async (url) => {
+          const response = await request('GET', url, 'holder');
+          const rows: { id: number; status: string }[] = response.body.rows ?? response.body;
+
+          expect(response.status).toBe(200);
+          expect(rows.find(({ id }) => id === revokedPermitId)).toMatchObject({
+            status: 'RELOCATION_REQUIRED',
+          });
+          expect(rows.map(({ id }) => id)).not.toContain(deletedPermitId);
+        },
+      );
+
+      it('the holder opens the permit and the internal mark is not exposed', async () => {
+        const response = await request('GET', `/permits/${revokedPermitId}`, 'holder');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({ id: revokedPermitId, status: 'RELOCATION_REQUIRED' });
+        expect(response.body).not.toHaveProperty('relocationRequired');
+      });
+
+      it('the holder cannot change the permit', async () => {
+        const response = await request('PATCH', `/permits/${revokedPermitId}`, 'holder', {
+          fencedArea: 5,
+        });
+
+        expect(response.status).toBe(404);
+        expect((await permitRow(revokedPermitId)).fencedArea).toBeNull();
+      });
+
+      it('a stranger does not see the permit', async () => {
+        const list = await request('GET', '/permits?pageSize=100', 'stranger');
+        const single = await request('GET', `/permits/${revokedPermitId}`, 'stranger');
+
+        expect(list.body.rows.map((row: { id: number }) => row.id)).not.toContain(revokedPermitId);
+        expect(single.status).toBe(404);
+      });
+
+      // Užklausos parametrai turėtojui neatveria anksčiau panaikinto leidimo.
+      it.each([
+        `query=${encodeURIComponent('{"deletedAt":[]}')}`,
+        'query[deletedAt][]=1',
+        `query=${encodeURIComponent('{"relocationRequired":false}')}`,
+        `query=${encodeURIComponent(
+          '{"$or":[{"deletedAt":{"$exists":true}},{"relocationRequired":false}]}',
+        )}`,
+        'scope=deleted',
+        'scope=false',
+      ])('the holder does not reach a permit revoked earlier with %s', async (params) => {
+        const list = await request('GET', `/permits?pageSize=100&${params}`, 'holder');
+        const single = await request('GET', `/permits/${deletedPermitId}?${params}`, 'holder');
+
+        expect(list.status).toBe(200);
+        expect(list.body.rows.map((row: { id: number }) => row.id)).not.toContain(deletedPermitId);
+        expect(single.status).toBe(404);
+      });
+
+      // Laukų, kurių turėtojas nemato, jis negali atspėti ir filtruodamas.
+      it('the holder cannot filter by who revoked a permit or when', async () => {
+        await knex('permits')
+          .where({ id: revokedPermitId })
+          .update({ deletedBy: localUserId.admin });
+        const ids = async (params: string) => {
+          const response = await request('GET', `/permits?pageSize=100&${params}`, 'holder');
+          expect([params, response.status]).toEqual([params, 200]);
+          return response.body.rows.map((row: { id: number }) => row.id).sort();
+        };
+        const json = (value: unknown) => encodeURIComponent(JSON.stringify(value));
+        const all = await ids('');
+        expect(all).toContain(revokedPermitId);
+
+        for (const params of [
+          `query=${json({ deletedBy: 999999 })}`,
+          `query=${json({ deletedBy: localUserId.admin })}`,
+          `query=${json({ deletedAt: { $gt: '2100-01-01' } })}`,
+          `query=${json({ relocationRequired: false })}`,
+          `query=${json({ $or: [{ deletedBy: 999999 }, { deletedAt: { $exists: false } }] })}`,
+          `filter=${json({ deletedBy: 999999 })}`,
+        ]) {
+          expect([params, await ids(params)]).toEqual([params, all]);
+        }
+      });
+
+      it('the holder does not learn who revoked the permit or when', async () => {
+        await knex('permits')
+          .where({ id: revokedPermitId })
+          .update({ deletedBy: localUserId.admin });
+
+        const plain = await request('GET', `/permits/${revokedPermitId}`, 'holder');
+        const populated = await request(
+          'GET',
+          `/permits/${revokedPermitId}?populate=deletedBy`,
+          'holder',
+        );
+
+        for (const response of [plain, populated]) {
+          expect(response.status).toBe(200);
+          expect(response.body).not.toHaveProperty('deletedBy');
+          expect(response.body).not.toHaveProperty('deletedAt');
+        }
+      });
+
+      it('an admin sees the status, the date and who revoked the permit', async () => {
+        const response = await request(
+          'GET',
+          `/permits/${revokedPermitId}?scope=deleted&populate=deletedBy`,
+          'admin',
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          status: 'RELOCATION_REQUIRED',
+          deletedBy: { id: localUserId.admin },
+        });
+        expect(response.body.deletedAt).toBeTruthy();
+      });
+    });
+
     it('a user cannot list deleted permits', async () => {
       const response = await request('GET', '/permits/deleted', 'holder');
       expect(response.status).toBe(401);

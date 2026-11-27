@@ -58,6 +58,19 @@ export const isSqlSafeJson = (value: unknown): boolean => {
 export const isSafeSortField = (item: unknown): boolean =>
   typeof item === 'string' && /^-?[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/.test(item);
 
+// Pašalina nurodytus laukus iš užklausos bet kuriame gylyje (taip pat `$and` ir `$or` viduje):
+// lauko, kurio naudotojas nemato, jis neturi galėti atspėti ir filtruodamas.
+export const omitQueryFields = (value: unknown, fields: readonly string[]): unknown => {
+  if (Array.isArray(value)) return value.map((item) => omitQueryFields(item, fields));
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !fields.includes(key))
+      .map(([key, item]) => [key, omitQueryFields(item, fields)]),
+  );
+};
+
 type SearchableField = { name: string; columnName?: string; virtual?: boolean };
 
 const toList = (value: unknown): string[] =>
