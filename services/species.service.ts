@@ -382,6 +382,11 @@ export default class SpeciesService extends moleculer.Service {
         }
       }
       ctx.params.permitData = existingPermit;
+    } else {
+      // Rūšis be leidimo (globojama) su leidimu nesiejama: kliento nurodytas `permit` neimamas,
+      // kitaip per tokią rūšį būtų pasiekiamas bet kuris, taip pat ir svetimas, leidimas.
+      delete ctx.params.permit;
+      delete ctx.params.permitData;
     }
     ctx.params.tenant = profile;
     ctx.params.user = userId;

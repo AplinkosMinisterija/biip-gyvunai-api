@@ -47,6 +47,7 @@ describe('list parameters cannot widen access (integration)', () => {
   const userId = {} as Record<Role, number>;
   const tenantId = {} as Record<'holder' | 'stranger', number>;
   const membershipId = {} as Record<'holder' | 'owner' | 'stranger', number>;
+  let classifierId: number;
   const own = {} as Owned & { deletedPermit: number; deletedRecord: number; tenantPermit: number };
   const foreign = {} as Owned & { deletedPermit: number; tenantPermit: number };
 
@@ -117,7 +118,7 @@ describe('list parameters cannot widen access (integration)', () => {
         .update({ tenants: JSON.stringify({ [tenantId[company]]: memberRole }) });
     }
 
-    const [classifierId] = await activeClassifierIds(1);
+    [classifierId] = await activeClassifierIds(1);
     for (const [role, target] of [
       ['holder', own],
       ['stranger', foreign],
@@ -252,6 +253,45 @@ describe('list parameters cannot widen access (integration)', () => {
         const single = await request(`/${resource}/${foreign[key]}?${query}`, 'holder');
         expect([query, single.status]).toEqual([query, 404]);
       }
+    });
+
+    // Rūšis be leidimo (globojama) negali rodyti į leidimą: kitaip per ją būtų galima perskaityti
+    // svetimą leidimą ar registruoti rūšį leidime, kuris naudotojui nepriklauso.
+    it('a new species without a permit is not linked to the permit it names', async () => {
+      const created = await request('/species', 'holder', {
+        method: 'POST',
+        body: {
+          permit: foreign.permit,
+          possessionType: 'FOSTER',
+          speciesClassifier: classifierId,
+          type: 'GROUP',
+        },
+      });
+      expect(created.status).toBe(200);
+
+      const row = await knex('species').where({ id: created.body.id }).first('permitId');
+      const read = await request(`/species/${created.body.id}?populate=permit`, 'holder');
+
+      expect(row.permitId).toBeNull();
+      expect(read.status).toBe(200);
+      expect(read.body.permit ?? null).toBeNull();
+    });
+
+    it('a new species cannot be registered under a permit of another holder', async () => {
+      for (const possessionType of ['WITH_PERMIT', 'ANYTHING_ELSE']) {
+        const response = await request('/species', 'holder', {
+          method: 'POST',
+          body: {
+            permit: foreign.permit,
+            possessionType,
+            speciesClassifier: classifierId,
+            type: 'GROUP',
+          },
+        });
+        expect([possessionType, response.status === 200]).toEqual([possessionType, false]);
+      }
+
+      expect(await knex('species').where({ permitId: foreign.permit })).toHaveLength(1);
     });
 
     // Anksčiau JSON eilute perduota užklausa ne administratoriui baigdavosi 500 klaida.
