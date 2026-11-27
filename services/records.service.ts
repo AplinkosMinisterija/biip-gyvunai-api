@@ -9,12 +9,14 @@ import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { scopeCondition } from '../modules/clientQuery';
 import { latestRecordByDate } from '../modules/latestRecord';
-import { diffRecord, RECORD_DATE_FIELDS, RecordEditableField } from '../modules/recordChanges';
+import { isPermitRevoked, throwPermitRevokedError } from '../modules/permitStatus';
+import { RECORD_DATE_FIELDS, RecordEditableField, diffRecord } from '../modules/recordChanges';
 import { isLateEventDate, recordEventDate, resolveLateness } from '../modules/recordLateness';
 import {
   AMOUNT_RECORD_TYPES,
-  calculateGroupAmount,
+  INCOMING_RECORD_TYPES,
   OUTGOING_RECORD_TYPES,
+  calculateGroupAmount,
 } from '../modules/speciesAmount';
 import {
   COMMON_DEFAULT_SCOPES,
@@ -23,9 +25,9 @@ import {
   CommonFields,
   CommonPopulates,
   Gender,
-  isAdmin,
   RecordType,
   Table,
+  isAdmin,
 } from '../types';
 import { Animal } from './animals.service';
 import { AuthUserRole, UserAuthMeta } from './api.service';
@@ -428,6 +430,10 @@ export default class RecordsService extends moleculer.Service {
     // Anuliavimas skaičiuojamas kaip įrašo pašalinimas: įsigijimo neanuliuosi, jei dalis
     // gyvūnų jau išėjo.
     await this.assertStockAfterChange(ctx, record);
+    // Anuliuotas išėjimo įrašas gyvūnus grąžintų — panaikintame leidime tai gali tik AAD.
+    if (!isAdmin(ctx) && OUTGOING_RECORD_TYPES.includes(record.type)) {
+      await this.assertPermitsNotRevoked(ctx, await this.permitIdsOfRecord(ctx, record));
+    }
 
     // Sąlyginis atnaujinimas: iš dviejų vienu metu siųstų anuliavimų įrašomas tik vienas.
     const now = new Date();
@@ -527,11 +533,17 @@ export default class RecordsService extends moleculer.Service {
     if (!changedFields.length) return record;
 
     if (changes.numberOfAnimals) {
-      await this.assertStockAfterChange(ctx, record, {
+      const corrected = {
         species: record.species,
         type: record.type,
         numberOfAnimals: Number(changes.numberOfAnimals.new),
-      });
+      };
+      await this.assertStockAfterChange(ctx, record, corrected);
+      // Taisymas, kuris padidintų gyvūnų skaičių, panaikintame leidime leidžiamas tik AAD.
+      const increase = calculateGroupAmount([corrected]) - calculateGroupAmount([record]);
+      if (increase > 0 && !isAdmin(ctx)) {
+        await this.assertPermitsNotRevoked(ctx, await this.permitIdsOfRecord(ctx, record));
+      }
     }
 
     // Įrašoma ta pati (sutvarkyta) reikšmė, kuri saugoma istorijoje.
@@ -590,6 +602,32 @@ export default class RecordsService extends moleculer.Service {
       pageSize: ctx.params.pageSize,
       populate: 'createdBy',
     });
+  }
+
+  // AAD sprendimai (#85, 5 ir 35 kl.): panaikintame leidime gyvūnų nebedaugėja — nauji gyvūnai
+  // neregistruojami, įsigijimo ir gimimo įrašai nekuriami, o laikytojo taisymai ir anuliavimai
+  // skaičiaus nedidina. Skaičių mažinantys ir kiti įrašai pildomi toliau.
+  @Method
+  async assertPermitsNotRevoked(ctx: Context<unknown, UserAuthMeta>, permitIds: unknown[]) {
+    for (const id of uniq(permitIds.filter(Boolean).map(Number))) {
+      const permit: Pick<Permit, 'status'> = await ctx.call('permits.resolve', {
+        id,
+        scope: false,
+        fields: ['id', 'status'],
+      });
+      if (isPermitRevoked(permit)) throwPermitRevokedError();
+    }
+  }
+
+  // Įrašo leidimai: gyvūno įrašai `permit` lauko dažnai neturi, todėl žiūrima ir į rūšį bei gyvūną.
+  @Method
+  async permitIdsOfRecord(ctx: Context<unknown, UserAuthMeta>, record: Partial<Record>) {
+    const related = async (action: string, id?: number) =>
+      id ? ctx.call<{ permit?: number } | null, object>(action, { id, scope: false }) : null;
+    const species = await related('species.resolve', record.species);
+    const animal = await related('animals.resolve', record.animal);
+
+    return [record.permit, species?.permit, animal?.permit];
   }
 
   // Laikytojui pasiekiami tik jo (ar jo įmonės) įrašai, kaip per `beforeMutate`; svetimas
@@ -707,6 +745,7 @@ export default class RecordsService extends moleculer.Service {
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
     let entityTenant;
     let entityUser;
+    const permitIds: unknown[] = [];
     if (ctx.params.animal) {
       const animal: any = await ctx.call('animals.findOne', {
         query: {
@@ -719,6 +758,7 @@ export default class RecordsService extends moleculer.Service {
       }
       entityTenant = animal.tenant;
       entityUser = animal.user;
+      permitIds.push(animal.permit);
       const method = recordPropertyNames[ctx.params.type];
       if (animal[method]) {
         throw new moleculer.Errors.MoleculerClientError(
@@ -744,6 +784,7 @@ export default class RecordsService extends moleculer.Service {
       }
       entityTenant = species.tenant;
       entityUser = species.user;
+      permitIds.push(species.permit);
       ctx.params.permit = species.permit;
       ctx.params.speciesClassifier = species.speciesClassifier;
       this.validateNumberOfAnimals(species, ctx.params.type, ctx.params.numberOfAnimals);
@@ -781,6 +822,13 @@ export default class RecordsService extends moleculer.Service {
           error: 'Unauthorized',
         });
       }
+    }
+
+    // AAD sprendimai (#85, 5 ir 35 kl.): panaikintame leidime gyvūnų nebedaugėja — įsigijimo ir
+    // gimimo įrašai nepriimami. Kiti įrašai (perleidimas, paleidimas, gaišimas, gydymas ir kt.)
+    // pildomi toliau, kol gyvūnai iškeliami.
+    if (INCOMING_RECORD_TYPES.includes(ctx.params.type)) {
+      await this.assertPermitsNotRevoked(ctx, permitIds);
     }
 
     // Gyvūną registruojantis servisas vėlavimą nustato pats pagal registracijos įvykį

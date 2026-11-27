@@ -5,6 +5,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
+import { isPermitRevoked } from '../modules/permitStatus';
 import { isSpeciesAllowedByPermit } from '../modules/permitValidation';
 import {
   OUTGOING_RECORD_TYPES,
@@ -437,7 +438,11 @@ export default class SpeciesService extends moleculer.Service {
         species[groupByKey].speciesClassifier[id].countKg += countKg;
       }
 
-      species[groupByKey].permitsCount.push(currentSpecies.permit.id);
+      // AAD sprendimas (#85, 35 kl.): panaikinto leidimo gyvūnai skaičiuojami, kol išregistruojami,
+      // bet pats leidimas į leidimų skaičių nebeįeina.
+      if (!isPermitRevoked(currentSpecies.permit)) {
+        species[groupByKey].permitsCount.push(currentSpecies.permit.id);
+      }
       species[groupByKey].count += count;
       species[groupByKey].countKg += countKg;
     };

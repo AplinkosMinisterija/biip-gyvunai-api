@@ -6,7 +6,8 @@ import { Action, Event, Method, Service } from 'moleculer-decorators';
 import PostgisMixin from 'moleculer-postgis';
 import DbConnection, { MaterializedView } from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
-import { isSqlSafeJson, parseQuery } from '../modules/clientQuery';
+import { isSqlSafeJson, omitQueryFields, parseQuery, scopeCondition } from '../modules/clientQuery';
+import { PermitStatus, permitStatus } from '../modules/permitStatus';
 import {
   PermitIdentity,
   isMunicipalityAccepted,
@@ -29,6 +30,7 @@ import {
   PERMIT_OWNERSHIP_FIELDS,
   RestrictionType,
   Table,
+  fieldValueForDeletedScope,
   throwBadRequestError,
   throwNoRightsError,
   throwNotFoundError,
@@ -103,6 +105,7 @@ interface Fields extends CommonFields {
   aviarySizeIndoor?: string;
   aviarySizeOutdoor?: string;
   aviaryHeight?: string;
+  status: PermitStatus;
 }
 
 interface Populates extends CommonPopulates {
@@ -116,6 +119,9 @@ export type Permit<
   P extends keyof Populates = never,
   F extends keyof (Fields & Populates) = keyof Fields,
 > = Table<Fields, Populates, P, F>;
+
+// Panaikinimo duomenys, kurių turėtojas nemato (žr. `includeRevokedForHolder`).
+const HOLDER_HIDDEN_FIELDS = ['deletedAt', 'deletedBy', 'relocationRequired'] as const;
 
 const PERMIT_ACTION_PARAMS = {
   search: {
@@ -242,12 +248,32 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       aviarySizeIndoor: 'string',
       aviarySizeOutdoor: 'string',
       aviaryHeight: 'string',
+      // Žymą nustato tik leidimo panaikinimas (žr. `markPermitDeleted`), klientas jos nekeičia.
+      relocationRequired: {
+        type: 'boolean',
+        readonly: true,
+        hidden: true,
+      },
+      // AAD sprendimai (#85, 5 ir 35 kl.): žr. modules/permitStatus.ts.
+      status: {
+        type: 'string',
+        virtual: true,
+        get: ({ entity }: FieldHookCallback) => permitStatus(entity),
+      },
       ...COMMON_FIELDS,
       // AAD sprendimas (#85, 15 ir 30 kl.): sąrašuose rodoma atnaujinimo data (tik žmogaus pakeitimai).
       updatedAt: { ...COMMON_FIELDS.updatedAt, hidden: false },
+      // Kas panaikino leidimą, kaip ir panaikinimo datą, mato tik AAD (sritis `deleted`) —
+      // turėtojas panaikintą leidimą gauna be šių duomenų.
+      deletedBy: { ...COMMON_FIELDS.deletedBy, get: fieldValueForDeletedScope },
     },
     scopes: {
       ...COMMON_SCOPES,
+      // Turėtojui rodomi leidimai: galiojantys ir panaikinti pagal naują tvarką
+      // (žr. `includeRevokedForHolder`).
+      activeOrRelocationRequired: scopeCondition({
+        $or: [{ deletedAt: { $exists: false } }, { relocationRequired: true }],
+      }),
     },
     defaultScopes: [...COMMON_DEFAULT_SCOPES],
     defaultPopulates: ['issuer', 'geom'],
@@ -282,11 +308,11 @@ const PERMIT_ACTION_PAGINATION_PARAMS = {
       create: ['assertSafeGeom', 'beforeCreate'],
       // `list` ir `find` geometrijos filtrą pašalina `moleculer-postgis` hook'as (žr.
       // `_applyGeomFilterFunction`), kitiems veiksmams jis nurodomas čia.
-      list: 'beforeSelectPermit',
-      find: 'beforeSelectPermit',
-      count: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
-      get: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
-      all: ['_applyGeomFilterFunction', 'beforeSelectPermit'],
+      list: ['beforeSelectPermit', 'includeRevokedForHolder'],
+      find: ['beforeSelectPermit', 'includeRevokedForHolder'],
+      count: ['_applyGeomFilterFunction', 'beforeSelectPermit', 'includeRevokedForHolder'],
+      get: ['_applyGeomFilterFunction', 'beforeSelectPermit', 'includeRevokedForHolder'],
+      all: ['_applyGeomFilterFunction', 'beforeSelectPermit', 'includeRevokedForHolder'],
       update: ['assertSafeGeom', 'beforeMutate', 'beforeUpdate'],
       replace: ['assertSafeGeom', 'beforeMutate'],
       remove: 'beforeMutate',
@@ -652,7 +678,11 @@ export default class PermitsService extends moleculer.Service {
       .client('permits')
       .where({ id: permitId })
       .whereNull('deletedAt')
-      .update({ deletedAt: new Date(), deletedBy: ctx.meta.user?.id ?? null })
+      .update({
+        deletedAt: new Date(),
+        deletedBy: ctx.meta.user?.id ?? null,
+        relocationRequired: true,
+      })
       .returning('id');
 
     if (!rows.length) {
@@ -671,7 +701,7 @@ export default class PermitsService extends moleculer.Service {
       .client('permits')
       .where({ id: permitId })
       .whereNotNull('deletedAt')
-      .update({ deletedAt: null, deletedBy: null })
+      .update({ deletedAt: null, deletedBy: null, relocationRequired: false })
       .returning('id');
 
     if (!rows.length) {
@@ -712,6 +742,23 @@ export default class PermitsService extends moleculer.Service {
     if (!isSqlSafeJson(geom)) throwValidationError('Invalid geometry');
 
     ctx.params.geom = geom;
+    return ctx;
+  }
+
+  // AAD sprendimas (#85, 35 kl.): turėtojas savo leidimą, panaikintą pagal naują tvarką, mato ir
+  // toliau — jame dar gali būti perleistinų gyvūnų. Anksčiau panaikinti leidimai jam nerodomi.
+  // Kliento `scope` ne administratoriui pašalina API vartai, todėl čia jis nustatomas saugiai.
+  @Method
+  includeRevokedForHolder(ctx: Context<any, UserAuthMeta>) {
+    if (this.buildAccessQuery(ctx.meta, true)) {
+      ctx.params.scope = ['-notDeleted', 'activeOrRelocationRequired'];
+      // Kas ir kada panaikino leidimą, turėtojas nemato, todėl pagal tai negali ir filtruoti.
+      ctx.params.query = omitQueryFields(parseQuery(ctx.params.query), HOLDER_HIDDEN_FIELDS);
+      if (ctx.params.filter) {
+        ctx.params.filter = omitQueryFields(parseQuery(ctx.params.filter), HOLDER_HIDDEN_FIELDS);
+      }
+    }
+
     return ctx;
   }
 

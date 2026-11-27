@@ -6,6 +6,7 @@ import { Action, Method, Service } from 'moleculer-decorators';
 import DbConnection from '../mixins/database.mixin';
 import ProfileMixin from '../mixins/profile.mixin';
 import { findLatestMarkingRecord } from '../modules/latestRecord';
+import { isPermitRevoked, throwPermitRevokedError } from '../modules/permitStatus';
 import { resolveLateness } from '../modules/recordLateness';
 import {
   COMMON_DEFAULT_SCOPES,
@@ -352,6 +353,11 @@ export default class AnimalsService extends moleculer.Service {
         throw new moleculer.Errors.MoleculerClientError('Invalid permit', 422, 'INVALID_PERMIT');
       }
     }
+
+    // AAD sprendimai (#85, 5 ir 35 kl.): panaikintame leidime nauji gyvūnai neregistruojami.
+    // Tikrinama po nuosavybės, kad svetimo leidimo būsenos pašalinis nesužinotų.
+    if (isPermitRevoked(permit)) throwPermitRevokedError();
+
     return ctx;
   }
 
