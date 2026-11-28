@@ -60,12 +60,18 @@ export enum NationalityType {
   FOREIGN = 'FOREIGN',
 }
 
+// Įrašai, kurių gyvūnas gali turėti tik po vieną, ir gyvūno laukas, kuriame toks įrašas matomas.
 const recordPropertyNames: { [key: string]: string } = {
   [RecordType.BIRTH]: 'birthRecord',
   [RecordType.DEATH]: 'deathRecord',
   [RecordType.SALE]: 'saleRecord',
   [RecordType.ACQUIREMENT]: 'acquirementRecord',
+  [RecordType.TRANSFER]: 'transferRecord',
+  [RecordType.RELEASE]: 'releaseRecord',
 };
+
+// Gyvūno laukai su įrašais, kuriais jis išėjo iš leidimo.
+const EXIT_RECORD_FIELDS = OUTGOING_RECORD_TYPES.map((type) => recordPropertyNames[type]);
 
 interface Fields extends CommonFields {
   id: number;
@@ -952,7 +958,22 @@ export default class RecordsService extends moleculer.Service {
       this.validateNumberOfAnimals(species, params.type, params.numberOfAnimals);
     }
 
-    // Gimimo, įsigijimo, gaišimo ir pardavimo įrašų gyvūnas turi tik po vieną.
+    // Gyvūnas iš leidimo išeina vieną kartą: jau parduoto, perduoto, paleisto į laisvę ar
+    // nugaišusio gyvūno kitas išėjimo įrašas (kad ir kito tipo) nepriimamas. Suklydus įrašas
+    // anuliuojamas ir registruojamas teisingas.
+    if (
+      animal &&
+      OUTGOING_RECORD_TYPES.includes(params.type) &&
+      EXIT_RECORD_FIELDS.some((field) => animal[field])
+    ) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'The animal has already left the permit',
+        422,
+        'ANIMAL_ALREADY_LEFT',
+      );
+    }
+
+    // Gimimo ir įsigijimo įrašų gyvūnas taip pat turi tik po vieną.
     if (animal?.[recordPropertyNames[params.type]]) {
       throw new moleculer.Errors.MoleculerClientError(
         'Invalid record type',
