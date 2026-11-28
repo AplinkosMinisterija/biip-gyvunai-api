@@ -42,6 +42,8 @@ interface Fields extends CommonFields {
   deathRecord: Record['id'];
   markingRecord: Record['id'];
   saleRecord: Record['id'];
+  transferRecord: Record['id'];
+  releaseRecord: Record['id'];
 }
 
 interface Populates extends CommonPopulates {
@@ -174,6 +176,34 @@ export type Animal<
             query: {
               animal: entity.id,
               type: RecordType.SALE,
+            },
+          });
+        },
+      },
+      // Individualiai laikomas gyvūnas iš leidimo išeina ir perduotas ar paleistas į laisvę
+      // (kaip grupinės apskaitos rūšys ir globojami gyvūnai), ne tik parduotas ar nugaišęs.
+      transferRecord: {
+        type: 'number',
+        virtual: true,
+        readonly: true,
+        get({ entity, ctx }: FieldHookCallback) {
+          return ctx.call('records.findOne', {
+            query: {
+              animal: entity.id,
+              type: RecordType.TRANSFER,
+            },
+          });
+        },
+      },
+      releaseRecord: {
+        type: 'number',
+        virtual: true,
+        readonly: true,
+        get({ entity, ctx }: FieldHookCallback) {
+          return ctx.call('records.findOne', {
+            query: {
+              animal: entity.id,
+              type: RecordType.RELEASE,
             },
           });
         },
