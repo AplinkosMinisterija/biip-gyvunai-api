@@ -147,6 +147,15 @@ const throwInvalidNumberOfAnimals = () => {
   );
 };
 
+// Įrašo objekto (gyvūno, rūšies, globojamo gyvūno) id: 0 ar neigiamas liktų įraše be objekto.
+const RECORD_TARGET_ID = {
+  type: 'number',
+  convert: true,
+  integer: true,
+  positive: true,
+  optional: true,
+} as const;
+
 @Service({
   name: 'records',
   mixins: [DbConnection(), ProfileMixin],
@@ -374,9 +383,9 @@ export default class RecordsService extends moleculer.Service {
   @Action({
     rest: 'POST /',
     params: {
-      animal: 'number|convert|optional',
-      species: 'number|convert|optional',
-      fosteredAnimal: 'number|convert|optional',
+      animal: RECORD_TARGET_ID,
+      species: RECORD_TARGET_ID,
+      fosteredAnimal: RECORD_TARGET_ID,
       type: {
         type: 'string',
         enum: Object.values(RecordType),
@@ -743,11 +752,24 @@ export default class RecordsService extends moleculer.Service {
 
   @Method
   async beforeCreate(ctx: Context<any, UserAuthMeta>) {
+    // Įrašas rašomas arba leidimo rūšiai ir jos gyvūnui, arba globojamam gyvūnui — ne abiem.
+    if (ctx.params.fosteredAnimal && (ctx.params.animal || ctx.params.species)) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'A record of a fostered animal cannot name an animal or a species',
+        422,
+        'INVALID_FOSTERED_ANIMAL',
+      );
+    }
+
     let entityTenant;
     let entityUser;
+    let animal: any;
+    let species: Species | undefined;
+    const requestedSpecies = ctx.params.species;
     const permitIds: unknown[] = [];
+    // Leidimą ir rūšies klasifikatorių įrašui nustato serveris pagal jo objektą, ne klientas.
     if (ctx.params.animal) {
-      const animal: any = await ctx.call('animals.findOne', {
+      animal = await ctx.call('animals.findOne', {
         query: {
           id: ctx.params.animal,
         },
@@ -759,17 +781,14 @@ export default class RecordsService extends moleculer.Service {
       entityTenant = animal.tenant;
       entityUser = animal.user;
       permitIds.push(animal.permit);
-      const method = recordPropertyNames[ctx.params.type];
-      if (animal[method]) {
-        throw new moleculer.Errors.MoleculerClientError(
-          'Invalid record type',
-          422,
-          'INVALID_RECORD_TYPE',
-        );
-      }
+      ctx.params.permit = animal.permit;
+      ctx.params.speciesClassifier = animal.speciesClassifier;
+      // Gyvūno įrašas rašomas jo rūšiai ir tada, kai rūšis nenurodyta ar nurodyta kita: toliau
+      // nuosavybė, kiekis ir pranešimas pareigūnams tikrinami pagal tikrąją gyvūno rūšį.
+      if (animal.species) ctx.params.species = animal.species;
     }
     if (ctx.params.species) {
-      const species: Species = await ctx.call('species.findOne', {
+      species = await ctx.call('species.findOne', {
         query: {
           id: ctx.params.species,
         },
@@ -782,12 +801,12 @@ export default class RecordsService extends moleculer.Service {
           'INVALID_SPECIES',
         );
       }
+      // Rūšies savininkas tvarko ir jos gyvūnų įrašus.
       entityTenant = species.tenant;
       entityUser = species.user;
       permitIds.push(species.permit);
       ctx.params.permit = species.permit;
       ctx.params.speciesClassifier = species.speciesClassifier;
-      this.validateNumberOfAnimals(species, ctx.params.type, ctx.params.numberOfAnimals);
     }
 
     if (ctx.params.fosteredAnimal) {
@@ -806,6 +825,7 @@ export default class RecordsService extends moleculer.Service {
       entityTenant = fosteredAnimal.tenant;
       entityUser = fosteredAnimal.user;
       ctx.params.speciesClassifier = fosteredAnimal.speciesClassifier;
+      delete ctx.params.permit;
     }
 
     if (
@@ -823,6 +843,10 @@ export default class RecordsService extends moleculer.Service {
         });
       }
     }
+
+    // Visa, kas priklauso nuo gyvūno ar rūšies būsenos, tikrinama tik po nuosavybės: pašalinis
+    // iš klaidos kodo neturi sužinoti nei svetimos rūšies likučio, nei svetimo gyvūno įrašų.
+    this.validateRecordTarget(ctx.params, animal, species, requestedSpecies);
 
     // AAD sprendimai (#85, 5 ir 35 kl.): panaikintame leidime gyvūnų nebedaugėja — įsigijimo ir
     // gimimo įrašai nepriimami. Kiti įrašai (perleidimas, paleidimas, gaišimas, gydymas ir kt.)
@@ -894,6 +918,48 @@ export default class RecordsService extends moleculer.Service {
       }
     }
     return data;
+  }
+
+  // Naujo įrašo gyvūnas ir rūšis turi derėti tarpusavyje ir su įrašo tipu.
+  @Method
+  validateRecordTarget(
+    params: { type: RecordType; numberOfAnimals?: number },
+    animal?: { species?: number | string } & { [field: string]: unknown },
+    species?: Species,
+    requestedSpecies?: number | string | null,
+  ) {
+    // Kartu su gyvūnu nurodyta rūšis turi būti paties gyvūno rūšis — įrašas neturi atitekti
+    // gyvūnui pagal kitos rūšies (kad ir savos) teises ar likutį.
+    if (animal && requestedSpecies != null && Number(requestedSpecies) !== Number(animal.species)) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'The animal does not belong to the species',
+        422,
+        'INVALID_SPECIES',
+      );
+    }
+
+    if (species) {
+      // Individualioje apskaitoje kiekis seka iš gyvūnų, todėl kiekį keičiantis įrašas be
+      // gyvūno nieko nepakeistų, tik liktų žurnale (ir išsiųstų pranešimą).
+      const isIndividual = species.type === AccountingType.INDIVIDUAL;
+      if (isIndividual && !animal && AMOUNT_RECORD_TYPES.includes(params.type)) {
+        throw new moleculer.Errors.MoleculerClientError(
+          'A record of an individually kept species needs its animal',
+          422,
+          'INVALID_ANIMAL',
+        );
+      }
+      this.validateNumberOfAnimals(species, params.type, params.numberOfAnimals);
+    }
+
+    // Gimimo, įsigijimo, gaišimo ir pardavimo įrašų gyvūnas turi tik po vieną.
+    if (animal?.[recordPropertyNames[params.type]]) {
+      throw new moleculer.Errors.MoleculerClientError(
+        'Invalid record type',
+        422,
+        'INVALID_RECORD_TYPE',
+      );
+    }
   }
 
   // Grupinėje apskaitoje kiekį keičiantis įrašas privalo turėti kiekį ir negali nuvesti
